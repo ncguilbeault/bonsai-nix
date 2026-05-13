@@ -26,5 +26,10 @@
         bonsai = import ./nix/hm-module.nix self;
         default = self.homeManagerModules.bonsai;
       };
+
+      nixosModules = {
+        bonsai = import ./nix/nixos-module.nix self;
+        default = self.nixosModules.bonsai;
+      };
     };
 }
