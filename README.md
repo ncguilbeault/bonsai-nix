@@ -13,27 +13,21 @@ Both modules share a common backbone (`nix/common.nix`) that declares submodule 
 
 ## Quick start
 
-Run Bonsai directly:
-
-```sh
-nix run github:ncguilbeault/bonsai-nix
-```
-
-Or install into your profile:
+Install into your profile:
 
 ```sh
 nix profile install github:ncguilbeault/bonsai-nix
 bonsai
 ```
 
-The first invocation runs `bonsai-setup`, which boots a Wine prefix at `~/.local/share/wineprefixes/wine-bonsai`, applies winetricks (`dotnet48 allfonts gdiplus` by default), and installs the Bonsai release `.exe`. Subsequent runs reuse the prefix; per-step markers (`.bonsai-booted`, `.bonsai-winetricks-<tag>`, `.bonsai-installed-<version>`) make setup idempotent.
+The first invocation of `bonsai` runs the `bonsai-setup` script, which boots a Wine prefix at `~/.local/share/wineprefixes/wine-bonsai`, applies winetricks (`dotnet48 allfonts gdiplus` by default), and runs the Bonsai setup installer. Subsequent runs reuse the prefix and per-step markers (`.bonsai-booted`, `.bonsai-winetricks-<tag>`, `.bonsai-installed-<version>`) make the setup idempotent. If something fails during the first installation, delete the wine prefix and try running the setup again.
 
 `packages.wine` is exposed separately so you can run `winecfg`, `regedit`, etc. against the same prefix:
 
 ```sh
 nix run github:ncguilbeault/bonsai-nix#wine -- winecfg
-# or, once installed:
-WINEPREFIX=~/.local/share/wineprefixes/wine-bonsai winecfg
+# or, once installed, simply:
+winecfg
 ```
 
 ## Patching Wine
