@@ -19,6 +19,7 @@
 , extraFhsPackages ? [ ]
 , extraEnv ? { }
 , prefixPath ? "$HOME/.local/share/wineprefixes"
+, stagingSrc ? null
 }:
 
 let
@@ -53,10 +54,31 @@ let
     pname = old.pname or "wine";
     inherit version src;
 
+    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+      pkgs.python3 pkgs.bash pkgs.git pkgs.perl
+      pkgs.autoconf pkgs.automake pkgs.libtool
+    ];
+
+    prePatch = (if old.prePatch or null != null then old.prePatch else "")
+      + lib.optionalString (stagingSrc != null) ''
+        cp -r ${stagingSrc} ./wine-staging-src
+        chmod -R u+w ./wine-staging-src
+        patchShebangs ./wine-staging-src/staging/patchinstall.py ./wine-staging-src/patches/gitapply.sh
+        patchShebangs ./tools
+        ./wine-staging-src/staging/patchinstall.py DESTDIR="$PWD" --all
+      '';
+
     patches =
-      if replaceUpstreamPatches
-      then patches
-      else (old.patches or [ ]) ++ patches;
+      let
+        upstream = old.patches or [ ];
+        # When applying the wine-staging patchset ourselves, drop any nixpkgs
+        # patches that overlap with it (staging is a superset).
+        filtered =
+          if stagingSrc != null
+          then lib.filter (p: !lib.hasInfix "add-dll-accept-device-paths" (toString p)) upstream
+          else upstream;
+      in
+        if replaceUpstreamPatches then patches else filtered ++ patches;
 
     postInstall = (old.postInstall or "") + ''
       if [ ! -e "$out/bin/wine64" ] && [ -f "$out/bin/wine" ]; then
