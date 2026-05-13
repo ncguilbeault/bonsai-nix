@@ -6,7 +6,7 @@
 }:
 
 { version ? "2.9.0"
-, sha256-hash ? "sha256-jL7m+I54h/f6mfEBooYze3TYp8aXofgQ1z0uB9GTmzs="
+, sha256 ? "sha256-jL7m+I54h/f6mfEBooYze3TYp8aXofgQ1z0uB9GTmzs="
 , mirror ? "https://github.com/bonsai-rx/bonsai/releases/download"
 , prefixName ? ""
 , wineArch ? "win64"
@@ -22,7 +22,7 @@
 let
   installer = fetchurl {
     url = "${mirror}/${version}/Bonsai-${version}.exe";
-    hash = "${sha256-hash}";
+    hash = "${sha256}";
   };
 
   defaultPrefixName = if prefixName != "" then prefixName else "wine-${version}";

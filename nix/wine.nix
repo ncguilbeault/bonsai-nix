@@ -9,7 +9,7 @@
 }:
 
 { version ? "11.0"
-, sha256 ? "wHpoV5M8H8YN/1RI1585ySSBwenbWqYo250DWERuBwE="
+, sha256 ? "sha256-wHpoV5M8H8YN/1RI1585ySSBwenbWqYo250DWERuBwE="
 , variant ? "wow-full"
 , mirror ? "https://dl.winehq.org/wine/source"
 , prefixName ? ""
@@ -48,7 +48,7 @@ let
 
   src = fetchurl {
     url = "${mirror}/${major}.${minor}/wine-${version}.tar.xz";
-    hash = "sha256-${sha256}";
+    hash = "${sha256}";
   };
 
   wineHQ = (baseFor variant).overrideAttrs (old: {
