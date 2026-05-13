@@ -36,10 +36,18 @@ let
       or (throw "wine variant '${v}' unknown; valid: ${lib.concatStringsSep ", " (lib.attrNames table)}");
 
   major = lib.head (lib.splitString "." version);
+
+  # If minor version is 0, then the stable release is in {major}.0, otherwise it's in {major}.{minor}.
+  minor = let
+    parts = lib.splitString "." version;
+    minorPart = lib.head (lib.tail parts) || "0";
+  in
+    if minorPart == "0" then "0" else "x";
+
   defaultPrefixName = if prefixName != "" then prefixName else "wine-${version}";
 
   src = fetchurl {
-    url = "${mirror}/${major}.0/wine-${version}.tar.xz";
+    url = "${mirror}/${major}.${minor}/wine-${version}.tar.xz";
     hash = "sha256-${sha256}";
   };
 
