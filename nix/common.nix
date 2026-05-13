@@ -30,12 +30,6 @@ let
         description = "Mirror for the WineHQ source tarball.";
       };
 
-      prefixName = lib.mkOption {
-        type = lib.types.str;
-        default = "";
-        description = "Wine prefix name. If empty, it defaults to 'wine-{version}'.";
-      };
-
       patches = lib.mkOption {
         type = lib.types.listOf lib.types.path;
         default = [ ];
@@ -65,12 +59,6 @@ let
         default = { };
         description = "Extra environment variables exported by the wine wrapper.";
       };
-
-      winePrefixes = lib.mkOption {
-        type = lib.types.str;
-        default = "$HOME/.local/share/wineprefixes";
-        description = "Path to the Wine prefixes. Default is ~/.local/share/wineprefixes.";
-      };
     };
   };
 
@@ -92,12 +80,6 @@ let
         type = lib.types.str;
         default = "https://github.com/bonsai-rx/bonsai/releases/download";
         description = "Mirror for the Bonsai installer.";
-      };
-
-      prefixName = lib.mkOption {
-        type = lib.types.str;
-        default = "";
-        description = "Wine prefix name for Bonsai. If empty, it defaults to 'wine-{version}'.";
       };
 
       wineArch = lib.mkOption {
@@ -141,26 +123,22 @@ let
         default = true;
         description = "If true, the bonsai package symlinks the wine package into its output.";
       };
-
-      winePrefixes = lib.mkOption {
-        type = lib.types.str;
-        default = "$HOME/.local/share/wineprefixes";
-        description = "Path to the Wine prefixes. Default is ~/.local/share/wineprefixes.";
-      };
     };
   };
 
   wineArgs = {
     inherit (cfg.wine)
-      version sha256 variant mirror prefixName patches replaceUpstreamPatches
-      withWinetricks extraFhsPackages extraEnv winePrefixes;
+      version sha256 variant mirror patches replaceUpstreamPatches
+      withWinetricks extraFhsPackages extraEnv;
+    inherit (cfg) prefixName winePrefixes;
   };
 
   bonsaiArgs = {
     inherit (cfg.bonsai)
-      version sha256 mirror prefixName wineArch
+      version sha256 mirror wineArch
       winetricksVerbs winetricksArgs winetricksMarkerTag
-      installerArgs extraEnv bundleWine winePrefixes;
+      installerArgs extraEnv bundleWine;
+    inherit (cfg) prefixName winePrefixes;
   };
 
   winePackage = pkgs.callPackage "${self}/nix/wine.nix" { } wineArgs;
@@ -183,6 +161,22 @@ in
       type = lib.types.package;
       readOnly = true;
       description = "The resolved Wine package (read-only).";
+    };
+
+    prefixName = lib.mkOption {
+      type = lib.types.str;
+      default = "bonsai";
+      description = ''
+        Wine prefix directory name (under winePrefixes). Shared by the bonsai
+        launcher and every wine wrapper (winecfg, regedit, etc.) so they all
+        target the same prefix.
+      '';
+    };
+
+    winePrefixes = lib.mkOption {
+      type = lib.types.str;
+      default = "$HOME/.local/share/wineprefixes";
+      description = "Directory holding Wine prefixes. The prefix path is winePrefixes/prefixName.";
     };
 
     wine = lib.mkOption {

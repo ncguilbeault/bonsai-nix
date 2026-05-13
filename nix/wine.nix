@@ -12,13 +12,13 @@
 , sha256 ? "sha256-wHpoV5M8H8YN/1RI1585ySSBwenbWqYo250DWERuBwE="
 , variant ? "wow-full"
 , mirror ? "https://dl.winehq.org/wine/source"
-, prefixName ? ""
+, prefixName ? "wine"
 , patches ? [ ]
 , replaceUpstreamPatches ? false
 , withWinetricks ? true
 , extraFhsPackages ? [ ]
 , extraEnv ? { }
-, winePrefixes ? "$HOME/.local/share/wineprefixes"
+, prefixPath ? "$HOME/.local/share/wineprefixes"
 }:
 
 let
@@ -40,11 +40,9 @@ let
   # If minor version is 0, then the stable release is in {major}.0, otherwise it's in {major}.{minor}.
   minor = let
     parts = lib.splitString "." version;
-    minorPart = lib.head (lib.tail parts) || "0";
+    minorPart = lib.head (lib.tail parts);
   in
     if minorPart == "0" then "0" else "x";
-
-  defaultPrefixName = if prefixName != "" then prefixName else "wine-${version}";
 
   src = fetchurl {
     url = "${mirror}/${major}.${minor}/wine-${version}.tar.xz";
@@ -116,7 +114,7 @@ let
     runScript = writeShellScript "wine-fhs-run" ''
       set -euo pipefail
 
-      : "''${WINEPREFIX:=${winePrefixes}/${defaultPrefixName}}"
+      : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
       export WINEPREFIX
       mkdir -p "$WINEPREFIX"
 
@@ -172,7 +170,7 @@ let
   # winetricks shim: forces it to use this FHS-wrapped wine, with a sane WINEPREFIX default.
   winetricksShim = writeShellScriptBin "winetricks" ''
     set -euo pipefail
-    : "''${WINEPREFIX:=${winePrefixes}/${defaultPrefixName}}"
+    : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
     export WINEPREFIX
     mkdir -p "$WINEPREFIX"
 
@@ -185,7 +183,7 @@ let
 in
 
 symlinkJoin {
-  name = "wine-bonsai-${version}";
+  name = "wine-${version}";
   paths = [ wineCmd ] ++ binAliases ++ lib.optional withWinetricks winetricksShim;
 
   passthru = {
@@ -194,7 +192,7 @@ symlinkJoin {
   };
 
   meta = {
-    description = "Patched Wine ${version} (${variant}) wrapped in an FHS env for Bonsai";
+    description = "Patched Wine ${version} (${variant}) wrapped in an FHS env";
     platforms = lib.platforms.linux;
     mainProgram = "wine";
   };
