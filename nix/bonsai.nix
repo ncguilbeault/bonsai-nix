@@ -90,9 +90,9 @@ let
     if [ ! -e "$install_marker" ]; then
       echo "bonsai: prefix not initialized; running bonsai-setup..."
       ${setup}/bin/bonsai-setup
+    else
+      exec wine bonsai "$@"
     fi
-
-    exec wine bonsai "$@"
   '';
 in
 
