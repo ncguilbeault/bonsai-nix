@@ -8,7 +8,7 @@
 { version ? "2.9.0"
 , sha256-hash ? "sha256-jL7m+I54h/f6mfEBooYze3TYp8aXofgQ1z0uB9GTmzs="
 , mirror ? "https://github.com/bonsai-rx/bonsai/releases/download"
-, prefixName ? "bonsai"
+, prefixName ? ""
 , wineArch ? "win64"
 , winetricksVerbs ? [ "dotnet48" "allfonts" "gdiplus" ]
 , winetricksArgs ? [ ]
@@ -16,6 +16,7 @@
 , installerArgs ? [ ]
 , extraEnv ? { WINEDEBUG = "-all"; }
 , bundleWine ? true
+, winePrefixes ? "$HOME/.local/share/wineprefixes"
 }:
 
 let
@@ -24,7 +25,7 @@ let
     hash = "${sha256-hash}";
   };
 
-  defaultPrefix = "$HOME/.local/share/wineprefixes/${prefixName}";
+  defaultPrefixName = if prefixName != "" then prefixName else "wine-${version}";
 
   envExports = lib.concatStringsSep "\n"
     (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") extraEnv);
@@ -47,7 +48,7 @@ let
   setup = writeShellScriptBin "bonsai-setup" ''
     set -euo pipefail
 
-    : "''${WINEPREFIX:=${defaultPrefix}}"
+    : "''${WINEPREFIX:=${winePrefixes}/${defaultPrefixName}}"
     export WINEPREFIX
     export WINEARCH=${lib.escapeShellArg wineArch}
     mkdir -p "$WINEPREFIX"
@@ -78,7 +79,7 @@ let
   launch = writeShellScriptBin "bonsai" ''
     set -euo pipefail
 
-    : "''${WINEPREFIX:=${defaultPrefix}}"
+    : "''${WINEPREFIX:=${winePrefixes}/${defaultPrefixName}}"
     export WINEPREFIX
     export WINEARCH=${lib.escapeShellArg wineArch}
     mkdir -p "$WINEPREFIX"

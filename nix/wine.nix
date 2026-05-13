@@ -12,11 +12,13 @@
 , sha256 ? "wHpoV5M8H8YN/1RI1585ySSBwenbWqYo250DWERuBwE="
 , variant ? "wow-full"
 , mirror ? "https://dl.winehq.org/wine/source"
+, prefixName ? ""
 , patches ? [ ]
 , replaceUpstreamPatches ? false
 , withWinetricks ? true
 , extraFhsPackages ? [ ]
 , extraEnv ? { }
+, winePrefixes ? "$HOME/.local/share/wineprefixes"
 }:
 
 let
@@ -34,6 +36,7 @@ let
       or (throw "wine variant '${v}' unknown; valid: ${lib.concatStringsSep ", " (lib.attrNames table)}");
 
   major = lib.head (lib.splitString "." version);
+  defaultPrefixName = if prefixName != "" then prefixName else "wine-${version}";
 
   src = fetchurl {
     url = "${mirror}/${major}.0/wine-${version}.tar.xz";
@@ -105,7 +108,7 @@ let
     runScript = writeShellScript "wine-fhs-run" ''
       set -euo pipefail
 
-      : "''${WINEPREFIX:=$HOME/.local/share/wineprefixes/default}"
+      : "''${WINEPREFIX:=${winePrefixes}/${defaultPrefixName}}"
       export WINEPREFIX
       mkdir -p "$WINEPREFIX"
 
@@ -161,7 +164,7 @@ let
   # winetricks shim: forces it to use this FHS-wrapped wine, with a sane WINEPREFIX default.
   winetricksShim = writeShellScriptBin "winetricks" ''
     set -euo pipefail
-    : "''${WINEPREFIX:=$HOME/.local/share/wineprefixes/default}"
+    : "''${WINEPREFIX:=${winePrefixes}/${defaultPrefixName}}"
     export WINEPREFIX
     mkdir -p "$WINEPREFIX"
 
