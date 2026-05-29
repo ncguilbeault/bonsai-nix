@@ -19,8 +19,8 @@ let
       };
 
       variant = lib.mkOption {
-        type = lib.types.enum [ "wow-staging" "wow-full" "stable" "wayland" "wayland-full" ];
-        default = "wow-full";
+        type = lib.types.enum [ "full" "waylandFull" ];
+        default = "full";
         description = "Base Wine variant from nixpkgs to override.";
       };
 

@@ -10,7 +10,7 @@
 
 { version ? "11.0"
 , sha256 ? "sha256-wHpoV5M8H8YN/1RI1585ySSBwenbWqYo250DWERuBwE="
-, variant ? "wow-full"
+, variant ? "full"
 , mirror ? "https://dl.winehq.org/wine/source"
 , prefixName ? "wine"
 , patches ? [ ]
@@ -26,11 +26,8 @@ let
   baseFor = v:
     let
       table = with pkgs; {
-        "wow-staging"  = wineWow64Packages.staging;
-        "wow-full"     = wineWow64Packages.full;
-        "stable"       = (winePackages.stable or wine);
-        "wayland"      = winePackages.wayland;
-        "wayland-full" = winePackages.waylandFull;
+        "full"        = wineWow64Packages.full;
+        "waylandFull" = wineWow64Packages.waylandFull;
       };
     in
       table.${v}
