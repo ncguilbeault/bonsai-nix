@@ -48,12 +48,6 @@ let
         description = "Include the winetricks shim in the wine package.";
       };
 
-      extraFhsPackages = lib.mkOption {
-        type = lib.types.listOf lib.types.package;
-        default = [ ];
-        description = "Extra packages to include in the Wine FHS environment.";
-      };
-
       extraEnv = lib.mkOption {
         type = lib.types.attrsOf lib.types.str;
         default = { };
@@ -129,7 +123,7 @@ let
   wineArgs = {
     inherit (cfg.wine)
       version sha256 variant mirror patches replaceUpstreamPatches
-      withWinetricks extraFhsPackages extraEnv;
+      withWinetricks extraEnv;
     inherit (cfg) prefixName winePrefixes;
   };
 

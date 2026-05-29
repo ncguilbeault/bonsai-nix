@@ -1,15 +1,15 @@
 # Bonsai - Nix Flake
 
-A Nix flake that installs [Bonsai-rx](https://bonsai-rx.org/) on Linux via a patched Wine build wrapped in an FHS environment.
+A Nix flake that installs [Bonsai-rx](https://bonsai-rx.org/) on Linux via a patched Wine build.
 
 ## What it provides
 
 - `packages.bonsai` — the `bonsai` launcher and `bonsai-setup` helper (auto-initializes the Wine prefix and installs Bonsai on first run). Symlink-joined with `packages.wine` by default.
-- `packages.wine` — a patched WineHQ build (default: 11.0, `wow-full`) wrapped in `buildFHSEnv` with X11, Wayland, GL/Vulkan, plus a `winetricks` shim and aliases for `wineboot`, `wineserver`, `winecfg`, `regedit`, `wineconsole`, `msiexec`, `winefile`, `notepad`, `uninstaller`, `winedbg`.
+- `packages.wine` — a patched WineHQ build (default: 11.0, `wow-full`) exposed via shell shims that default `WINEPREFIX` and propagate `extraEnv`, with a `winetricks` shim and matching shims for `wine`, `wine64`, `wineboot`, `wineserver`, `winecfg`, `regedit`, `wineconsole`, `msiexec`, `winefile`, `notepad`, `uninstaller`, `winedbg`.
 - `homeManagerModules.bonsai` — a Home Manager module exposing `programs.bonsai`. Adds the resolved package to `home.packages`.
 - `nixosModules.bonsai` — a NixOS module exposing the same `programs.bonsai` interface. Adds the resolved package to `environment.systemPackages` for a system-wide install.
 
-Both modules share a common backbone (`nix/common.nix`) that declares submodule options under `programs.bonsai.wine` (version, sha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraFhsPackages, extraEnv, winePrefixes, prefixName) and `programs.bonsai.bonsai` (version, sha256, mirror, prefixName, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, installerArgs, extraEnv, bundleWine, winePrefixes), plus an `installWine` toggle declared by each install-site wrapper.
+Both modules share a common backbone (`nix/common.nix`) that declares submodule options under `programs.bonsai.wine` (version, sha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraEnv, winePrefixes, prefixName) and `programs.bonsai.bonsai` (version, sha256, mirror, prefixName, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, installerArgs, extraEnv, bundleWine, winePrefixes), plus an `installWine` toggle declared by each install-site wrapper.
 
 ## Quick start
 
@@ -91,7 +91,7 @@ See `nix/common.nix` for the full option set and defaults.
 flake.nix             # inputs, packages, homeManagerModules, nixosModules
 patches/              # drop wine .patch files here
 nix/
-  wine.nix            # WineHQ tarball override + FHS wrapper + aliases
+  wine.nix            # WineHQ tarball override + shell shim wrappers
   bonsai.nix          # installer fetch + bonsai-setup / bonsai scripts
   common.nix          # programs.bonsai options + package construction
   hm-module.nix       # Home Manager wrapper (writes home.packages)

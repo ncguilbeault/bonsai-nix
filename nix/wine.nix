@@ -1,9 +1,7 @@
 { lib
 , pkgs
-, buildFHSEnv
 , fetchurl
 , symlinkJoin
-, writeShellScript
 , writeShellScriptBin
 , winetricks
 }:
@@ -16,7 +14,6 @@
 , patches ? [ ]
 , replaceUpstreamPatches ? false
 , withWinetricks ? true
-, extraFhsPackages ? [ ]
 , extraEnv ? { }
 , prefixPath ? "$HOME/.local/share/wineprefixes"
 , stagingSrc ? null
@@ -87,90 +84,23 @@ let
   envExports = lib.concatStringsSep "\n"
     (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") extraEnv);
 
-  fhsEnv = buildFHSEnv {
-    name = "wine-fhs";
-
-    targetPkgs = p: (with p; [
-      coreutils
-      findutils
-      gnugrep
-      gawk
-      which
-      file
-
-      # Common runtime deps
-      glib
-      zlib
-      gcc.cc.lib
-      openssl
-      cups
-      fontconfig
-      freetype
-      expat
-
-      # X11 stack
-      libx11
-      libxext
-      libxrender
-      libxrandr
-      libxi
-      libxcursor
-      libxfixes
-      libxinerama
-      libxcomposite
-      libxdamage
-
-      # Wayland
-      wayland
-      libxkbcommon
-
-      # GL / Vulkan
-      libglvnd
-      mesa
-      vulkan-loader
-    ]) ++ extraFhsPackages;
-
-    runScript = writeShellScript "wine-fhs-run" ''
-      set -euo pipefail
-
-      : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
-      export WINEPREFIX
-      mkdir -p "$WINEPREFIX"
-
-      ${envExports}
-
-      bin=wine
-      if [ "''${1-}" = "--__wine-bin" ]; then
-        shift
-        if [ "$#" -lt 1 ]; then
-          echo "wine-fhs: missing binary name after --__wine-bin" >&2
-          exit 2
-        fi
-        bin="$1"
-        shift
-      fi
-
-      if [ ! -x "${wineHQ}/bin/$bin" ]; then
-        echo "wine-fhs: '${wineHQ}/bin/$bin' not found or not executable" >&2
-        exit 127
-      fi
-
-      export PATH="${wineHQ}/bin:$PATH"
-      exec "${wineHQ}/bin/$bin" "$@"
-    '';
-  };
-
-  # Primary wine entrypoint: invokes the FHS wrapper directly (default = wine binary).
-  wineCmd = writeShellScriptBin "wine" ''
-    exec ${fhsEnv}/bin/wine-fhs "$@"
+  # Shared preamble for every wine-family shim: set up WINEPREFIX, env, PATH.
+  envSetup = ''
+    set -euo pipefail
+    : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
+    export WINEPREFIX
+    mkdir -p "$WINEPREFIX"
+    ${envExports}
+    export PATH="${wineHQ}/bin:$PATH"
   '';
 
-  # Each alias dispatches to a different wine binary inside the same FHS env.
-  mkAlias = name: writeShellScriptBin name ''
-    exec ${fhsEnv}/bin/wine-fhs --__wine-bin ${name} "$@"
+  mkWineShim = name: writeShellScriptBin name ''
+    ${envSetup}
+    exec "${wineHQ}/bin/${name}" "$@"
   '';
 
-  aliasNames = [
+  shimNames = [
+    "wine"
     "wine64"
     "wineboot"
     "wineserver"
@@ -184,34 +114,26 @@ let
     "winedbg"
   ];
 
-  binAliases = map mkAlias aliasNames;
+  binShims = map mkWineShim shimNames;
 
-  # winetricks shim: forces it to use this FHS-wrapped wine, with a sane WINEPREFIX default.
+  # winetricks shim: forces it to use this wine, with a sane WINEPREFIX default.
   winetricksShim = writeShellScriptBin "winetricks" ''
-    set -euo pipefail
-    : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
-    export WINEPREFIX
-    mkdir -p "$WINEPREFIX"
-
-    ${envExports}
-
-    export PATH="${wineHQ}/bin:$PATH"
-    export WINETRICKS_WINE="${fhsEnv}/bin/wine-fhs"
+    ${envSetup}
+    export WINETRICKS_WINE="${wineHQ}/bin/wine"
     exec ${winetricks}/bin/winetricks "$@"
   '';
 in
 
 symlinkJoin {
   name = "wine-${version}";
-  paths = [ wineCmd ] ++ binAliases ++ lib.optional withWinetricks winetricksShim;
+  paths = binShims ++ lib.optional withWinetricks winetricksShim;
 
   passthru = {
-    inherit wineHQ fhsEnv version variant;
-    fhsCommand = "${fhsEnv}/bin/wine-fhs";
+    inherit wineHQ version variant;
   };
 
   meta = {
-    description = "Patched Wine ${version} (${variant}) wrapped in an FHS env";
+    description = "Patched Wine ${version} (${variant})";
     platforms = lib.platforms.linux;
     mainProgram = "wine";
   };
