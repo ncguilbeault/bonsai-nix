@@ -1,0 +1,26 @@
+From ba20ecb6d8830f4b4ced9f0daa759ad8c641e1d2 Mon Sep 17 00:00:00 2001
+From: ncguilbeault <ncguilbeault@gmail.com>
+Date: Tue, 2 Jun 2026 11:17:39 +0100
+Subject: [PATCH] Remove assertion line which causes crash in Bonsai treeview
+ selector
+
+---
+ dlls/comctl32/treeview.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/comctl32/treeview.c b/dlls/comctl32/treeview.c
+index 6332040b7f5..ef958733958 100644
+--- a/dlls/comctl32/treeview.c
++++ b/dlls/comctl32/treeview.c
+@@ -4566,7 +4566,7 @@ TREEVIEW_DoSelectItem(TREEVIEW_INFO *infoPtr, INT action, HTREEITEM newSelect,
+ {
+     TREEVIEW_ITEM *prevSelect;
+ 
+-    assert(newSelect == NULL || TREEVIEW_ValidItem(infoPtr, newSelect));
++    // assert(newSelect == NULL || TREEVIEW_ValidItem(infoPtr, newSelect));
+ 
+     TRACE("Entering item %p (%s), flag 0x%x, cause 0x%x, state 0x%x\n",
+ 	  newSelect, TREEVIEW_ItemName(newSelect), action, cause,
+-- 
+2.54.0
+

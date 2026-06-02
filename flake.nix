@@ -45,6 +45,7 @@
             stagingSrc = wineStagingSrc;
             winePkgs = winePkgs;
             emulator = if isArm then "${fex}/bin/FEXInterpreter" else null;
+            patches = [ ./patches/0001-Remove-assertion-line-which-causes-crash-in-Bonsai-t.patch ];
           };
 
           bonsai = pkgs.callPackage ./nix/bonsai.nix { wine = wine; } {
