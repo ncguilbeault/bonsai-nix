@@ -124,7 +124,8 @@ let
     inherit (cfg.wine)
       version sha256 variant mirror patches replaceUpstreamPatches
       withWinetricks extraEnv;
-    inherit (cfg) prefixName winePrefixes;
+    inherit (cfg) prefixName;
+    prefixPath = cfg.winePrefixes;
   };
 
   bonsaiArgs = {
@@ -132,7 +133,8 @@ let
       version sha256 mirror wineArch
       winetricksVerbs winetricksArgs winetricksMarkerTag
       installerArgs extraEnv bundleWine;
-    inherit (cfg) prefixName winePrefixes;
+    inherit (cfg) prefixName;
+    prefixPath = cfg.winePrefixes;
   };
 
   winePackage = pkgs.callPackage "${self}/nix/wine.nix" { } wineArgs;
