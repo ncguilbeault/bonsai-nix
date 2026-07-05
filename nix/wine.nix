@@ -1,6 +1,8 @@
 { lib
 , pkgs
 , fetchurl
+, runCommand
+, runtimeShell
 , symlinkJoin
 , writeShellScriptBin
 , winetricks
@@ -17,12 +19,14 @@
 , extraEnv ? { }
 , prefixPath ? "$HOME/.local/share/wineprefixes"
 , stagingSrc ? null
+, emulator ? null
+, winePkgs ? pkgs
 }:
 
 let
   baseFor = v:
     let
-      table = with pkgs; {
+      table = with winePkgs; {
         "full"        = wineWow64Packages.full;
         "waylandFull" = wineWow64Packages.waylandFull;
       };
@@ -49,8 +53,8 @@ let
     inherit version src;
 
     nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-      pkgs.python3 pkgs.bash pkgs.git pkgs.perl
-      pkgs.autoconf pkgs.automake pkgs.libtool
+      winePkgs.python3 winePkgs.bash winePkgs.git winePkgs.perl
+      winePkgs.autoconf winePkgs.automake winePkgs.libtool
     ];
 
     prePatch = (if old.prePatch or null != null then old.prePatch else "")
@@ -81,6 +85,19 @@ let
     '';
   });
 
+  # On emulated hosts, wrap every wine binary so native processes can exec it.
+  wineBinDir =
+    if emulator == null then "${wineHQ}/bin"
+    else "${runCommand "wine-${version}-emulated" { } ''
+      mkdir -p "$out/bin"
+      for exe in ${wineHQ}/bin/*; do
+        wrapper="$out/bin/$(basename "$exe")"
+        echo '#!${runtimeShell}' > "$wrapper"
+        echo "exec ${emulator} \"$exe\" \"\$@\"" >> "$wrapper"
+        chmod +x "$wrapper"
+      done
+    ''}/bin";
+
   envExports = lib.concatStringsSep "\n"
     (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") extraEnv);
 
@@ -91,12 +108,12 @@ let
     export WINEPREFIX
     mkdir -p "$WINEPREFIX"
     ${envExports}
-    export PATH="${wineHQ}/bin:$PATH"
+    export PATH="${wineBinDir}:$PATH"
   '';
 
   mkWineShim = name: writeShellScriptBin name ''
     ${envSetup}
-    exec "${wineHQ}/bin/${name}" "$@"
+    exec "${wineBinDir}/${name}" "$@"
   '';
 
   shimNames = [
@@ -119,7 +136,9 @@ let
   # winetricks shim: forces it to use this wine, with a sane WINEPREFIX default.
   winetricksShim = writeShellScriptBin "winetricks" ''
     ${envSetup}
-    export WINETRICKS_WINE="${wineHQ}/bin/wine"
+    export WINE="${wineBinDir}/wine"
+    export WINESERVER="${wineBinDir}/wineserver"
+    export WINETRICKS_WINE="${wineBinDir}/wine"
     exec ${winetricks}/bin/winetricks "$@"
   '';
 in
@@ -129,7 +148,7 @@ symlinkJoin {
   paths = binShims ++ lib.optional withWinetricks winetricksShim;
 
   passthru = {
-    inherit wineHQ version variant;
+    inherit wineHQ version variant emulator;
   };
 
   meta = {
