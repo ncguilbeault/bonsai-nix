@@ -7,7 +7,7 @@
 
   outputs = { self, nixpkgs, ... }:
     let
-      systems = [ "x86_64-linux" ];
+      systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
       bonsaiVersion = "2.9.0";
       wineVersion = "11.8";
@@ -20,6 +20,9 @@
       packages = forAllSystems (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          isArm = system == "aarch64-linux";
+          winePkgs = if isArm then nixpkgs.legacyPackages.x86_64-linux else pkgs;
+          fex = pkgs.fex.override { withQt = false; };
 
           wineStagingSrc = pkgs.fetchFromGitHub {
             owner = "wine-staging";
@@ -34,6 +37,8 @@
             prefixName = prefixName;
             prefixPath = prefixPath;
             stagingSrc = wineStagingSrc;
+            winePkgs = winePkgs;
+            emulator = if isArm then "${fex}/bin/FEXInterpreter" else null;
           };
 
           bonsai = pkgs.callPackage ./nix/bonsai.nix { wine = wine; } {

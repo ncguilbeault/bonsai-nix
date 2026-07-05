@@ -53,6 +53,12 @@ let
         default = { };
         description = "Extra environment variables exported by the wine wrapper.";
       };
+
+      emulator = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Command that runs the x86_64 wine binaries on non-x86 hosts. Defaults to FEX's FEXInterpreter on aarch64.";
+      };
     };
   };
 
@@ -120,12 +126,20 @@ let
     };
   };
 
+  isArm = pkgs.stdenv.hostPlatform.system == "aarch64-linux";
+  winePkgs = if isArm then self.inputs.nixpkgs.legacyPackages.x86_64-linux else pkgs;
+  emulator =
+    if cfg.wine.emulator != null then cfg.wine.emulator
+    else if isArm then "${pkgs.fex.override { withQt = false; }}/bin/FEXInterpreter"
+    else null;
+
   wineArgs = {
     inherit (cfg.wine)
       version sha256 variant mirror patches replaceUpstreamPatches
       withWinetricks extraEnv;
     inherit (cfg) prefixName;
     prefixPath = cfg.winePrefixes;
+    inherit winePkgs emulator;
   };
 
   bonsaiArgs = {
