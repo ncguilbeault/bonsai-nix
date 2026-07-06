@@ -128,9 +128,16 @@ let
 
   isArm = pkgs.stdenv.hostPlatform.system == "aarch64-linux";
   winePkgs = if isArm then self.inputs.nixpkgs.legacyPackages.x86_64-linux else pkgs;
+  
+  fex = (pkgs.fex.override { withQt = false; }).overrideAttrs (old: {
+    cmakeFlags = old.cmakeFlags ++ [ "-DTUNE_CPU=none" ];
+    # FEX's timed futex tests crash qemu-user, so skip tests when building via binfmt emulation
+    doCheck = false;
+  });
+
   emulator =
     if cfg.wine.emulator != null then cfg.wine.emulator
-    else if isArm then "${pkgs.fex.override { withQt = false; }}/bin/FEXInterpreter"
+    else if isArm then "${fex}/bin/FEXInterpreter"
     else null;
 
   wineArgs = {

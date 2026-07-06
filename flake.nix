@@ -22,7 +22,12 @@
           pkgs = nixpkgs.legacyPackages.${system};
           isArm = system == "aarch64-linux";
           winePkgs = if isArm then nixpkgs.legacyPackages.x86_64-linux else pkgs;
-          fex = pkgs.fex.override { withQt = false; };
+          
+          fex = (pkgs.fex.override { withQt = false; }).overrideAttrs (old: {
+            cmakeFlags = old.cmakeFlags ++ [ "-DTUNE_CPU=none" ];
+            # FEX's timed futex tests crash qemu-user, so skip tests when building via binfmt emulation
+            doCheck = false;
+          });
 
           wineStagingSrc = pkgs.fetchFromGitHub {
             owner = "wine-staging";
