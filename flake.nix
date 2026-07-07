@@ -9,10 +9,11 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
-      bonsaiVersion = "2.9.0";
-      wineVersion = "11.8";
-      wineStagingSha256 = "sha256-lW5dfCfsB+z84mlLpfmkR7QDxmhL+RcBufSftUutHto=";
-      wineSha256 = "sha256-U6qFmV1Ll/ARahxWuKahQXcw71mid4GdLT0xNk6lVrA=";
+      bonsaiVersion = "2.9.1";
+      wineVersion = "11.12";
+      wineStagingSha256 = "sha256-3pE/RVUvH56z9Ilumokl7nNMrhfksuUWzKq6k8behW4=";
+      wineSha256 = "sha256-07wJEZLZhYRsnyAGXMgfITMfAeIrc2sTHjRJ4TBmcbw=";
+      bonsaiSha256 = "sha256-d3b5oOZTiLlDgLPLlMHJyXdqBvuN+6WlcYDnVpS08NI=";
       prefixName = "wine-bonsai";
       prefixPath = "$HOME/.local/share/wineprefixes";
     in
@@ -48,6 +49,7 @@
 
           bonsai = pkgs.callPackage ./nix/bonsai.nix { wine = wine; } {
             version = bonsaiVersion;
+            sha256 = bonsaiSha256;
             prefixName = prefixName;
             prefixPath = prefixPath;
           };
