@@ -58,7 +58,7 @@ let
     boot_marker="$WINEPREFIX/.bonsai-booted"
     if [ ! -e "$boot_marker" ]; then
       echo "bonsai-setup: initializing prefix at $WINEPREFIX"
-      WINEDLLOVERRIDES="mscoree,mshtml=" wineboot -u >/dev/null 2>&1 || true
+      WINEDLLOVERRIDES="mscoree,mshtml=" wineboot -u >/dev/null 2>&1
       touch "$boot_marker"
     fi
 
