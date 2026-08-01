@@ -33,6 +33,22 @@ nix run github:ncguilbeault/bonsai-nix#wine -- winecfg
 winecfg
 ```
 
+## Wine workarounds
+
+`bonsai-setup` sets `UseEGL=N` under `HKCU\Software\Wine\X11 Driver` in the prefix. Wine >= 10.17 implements WGL through EGL in the X11 driver by default, and on the NVIDIA proprietary driver the EGL path exposes no pixel formats that OpenTK accepts, so Bonsai.Shaders window creation fails with `The requested GraphicsMode is not supported` ([opentk/opentk#523](https://github.com/opentk/opentk/issues/523)). Forcing the deprecated GLX backend restores a working format list. This is a temporary workaround; drop it once Wine's EGL path works on the NVIDIA driver. Prefixes initialized before this workaround was added can apply it manually:
+
+```sh
+wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d N /f
+```
+
+## Wine workarounds
+
+`bonsai-setup` sets `UseEGL=N` under `HKCU\Software\Wine\X11 Driver` in the prefix. Wine >= 10.17 implements WGL through EGL in the X11 driver by default, and on the NVIDIA proprietary driver the EGL path exposes no pixel formats that OpenTK accepts, so Bonsai.Shaders window creation fails with `The requested GraphicsMode is not supported` ([opentk/opentk#523](https://github.com/opentk/opentk/issues/523)). Forcing the deprecated GLX backend restores a working format list. This is a temporary workaround; drop it once Wine's EGL path works on the NVIDIA driver. Prefixes initialized before this workaround was added can apply it manually:
+
+```sh
+wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d N /f
+```
+
 ## CUDA support (nvidia-libs)
 
 The `-cuda` package variants (and the `programs.bonsai.nvidiaLibs.enable` module option) bundle the prebuilt [nvidia-libs](https://github.com/SveSop/nvidia-libs) release, which provides `nvcuda`, `nvml`, `nvcuvid`/`nvencodeapi`, `nvoptix` and `nvapi` for Wine.
