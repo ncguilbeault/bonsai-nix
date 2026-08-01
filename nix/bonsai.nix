@@ -71,6 +71,9 @@ let
       touch "$install_marker"
     fi
 
+    # Temporary workaround: Wine >= 10.17 implements WGL through EGL in the X11 driver by default, and on the NVIDIA proprietary driver the EGL path exposes no pixel formats that OpenTK accepts, so Bonsai.Shaders window creation fails with "The requested GraphicsMode is not supported". Force the GLX backend until the EGL path works on NVIDIA (see opentk/opentk#523).
+    wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d N /f >/dev/null
+
     echo "bonsai-setup: ready (prefix: $WINEPREFIX)"
   '';
 
