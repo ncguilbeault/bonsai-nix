@@ -21,6 +21,7 @@
 , stagingSrc ? null
 , emulator ? null
 , winePkgs ? pkgs
+, nvidiaLibs ? null
 }:
 
 let
@@ -101,6 +102,16 @@ let
   envExports = lib.concatStringsSep "\n"
     (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") extraEnv);
 
+  # nvidia-libs runtime environment: WINEDLLPATH lets wine pick up the NVML builtin
+  # (nvml.dll/nvml.so), and the ELF winelib modules (nvcuda, nvcuvid, ...) dlopen the
+  # host NVIDIA driver libraries, which live under /run/opengl-driver/lib on NixOS.
+  nvidiaLibsEnv = lib.optionalString (nvidiaLibs != null) ''
+    export WINEDLLPATH="${nvidiaLibs}/x64/wine''${WINEDLLPATH:+:$WINEDLLPATH}"
+    if [ -d /run/opengl-driver/lib ]; then
+      export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+  '';
+
   # Shared preamble for every wine-family shim: set up WINEPREFIX, env, PATH.
   envSetup = ''
     set -euo pipefail
@@ -108,6 +119,7 @@ let
     export WINEPREFIX
     mkdir -p "$WINEPREFIX"
     ${envExports}
+    ${nvidiaLibsEnv}
     export PATH="${wineBinDir}:$PATH"
   '';
 
@@ -148,7 +160,7 @@ symlinkJoin {
   paths = binShims ++ lib.optional withWinetricks winetricksShim;
 
   passthru = {
-    inherit wineHQ version variant emulator;
+    inherit wineHQ version variant emulator nvidiaLibs;
   };
 
   meta = {

@@ -11,9 +11,11 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
       bonsaiVersion = "2.9.1";
       wineVersion = "11.12";
+      nvidiaLibsVersion = "1.0.2";
       wineStagingSha256 = "sha256-3pE/RVUvH56z9Ilumokl7nNMrhfksuUWzKq6k8behW4=";
       wineSha256 = "sha256-07wJEZLZhYRsnyAGXMgfITMfAeIrc2sTHjRJ4TBmcbw=";
       bonsaiSha256 = "sha256-d3b5oOZTiLlDgLPLlMHJyXdqBvuN+6WlcYDnVpS08NI=";
+      nvidiaLibsSha256 = "sha256-Aei7Y2jQiOItjo8dAklyFOjbQ2R2Ahcl7wwHB7fLFzg=";
       prefixName = "wine-bonsai";
       prefixPath = "$HOME/.local/share/wineprefixes";
     in
@@ -23,7 +25,7 @@
           pkgs = nixpkgs.legacyPackages.${system};
           isArm = system == "aarch64-linux";
           winePkgs = if isArm then nixpkgs.legacyPackages.x86_64-linux else pkgs;
-          
+
           fex = (pkgs.fex.override { withQt = false; }).overrideAttrs (old: {
             cmakeFlags = old.cmakeFlags ++ [ "-DTUNE_CPU=none" ];
             # FEX's timed futex tests crash qemu-user, so skip tests when building via binfmt emulation
@@ -37,7 +39,26 @@
             sha256 = wineStagingSha256;
           };
 
-          wine = pkgs.callPackage ./nix/wine.nix { } {
+          # nvcuda is rebuilt from source so the cuLaunchHostFunc callback-relay patch can
+          # be applied; the prebuilt release passes guest callbacks straight to the host
+          # driver, which crashes any app using CUDA host functions (e.g. ONNX Runtime).
+          nvcuda = pkgs.callPackage ./nix/nvcuda.nix { } {
+            wineTools = wine.passthru.wineHQ;
+            patches = [ ./patches/0002-nvcuda-relay-cuLaunchHostFunc-through-callback-worker.patch ];
+          };
+
+          nvidiaLibs = pkgs.callPackage ./nix/nvidia-libs.nix { } {
+            version = nvidiaLibsVersion;
+            sha256 = nvidiaLibsSha256;
+            inherit nvcuda;
+          };
+
+          # Windows CUDA/cuDNN runtime DLLs; component versions and hashes are pinned in nix/cuda-redist.nix.
+          cudaRedist = pkgs.callPackage ./nix/cuda-redist.nix { } { };
+
+          # Variant constructors: the wine/bonsai builds are shared across variants;
+          # only the shim environment and prefix bootstrap differ.
+          mkWine = { nvidiaLibs ? null }: pkgs.callPackage ./nix/wine.nix { } {
             version = wineVersion;
             sha256 = wineSha256;
             prefixName = prefixName;
@@ -46,18 +67,34 @@
             winePkgs = winePkgs;
             emulator = if isArm then "${fex}/bin/FEXInterpreter" else null;
             patches = [ ./patches/0001-Remove-assertion-line-which-causes-crash-in-Bonsai-t.patch ];
+            inherit nvidiaLibs;
           };
 
-          bonsai = pkgs.callPackage ./nix/bonsai.nix { wine = wine; } {
+          mkBonsai = { wine, nvidiaLibs ? null, cudaRedist ? null }: pkgs.callPackage ./nix/bonsai.nix { inherit wine; } {
             version = bonsaiVersion;
             sha256 = bonsaiSha256;
             prefixName = prefixName;
             prefixPath = prefixPath;
+            inherit nvidiaLibs cudaRedist;
           };
+
+          wine = mkWine { };
+          bonsai = mkBonsai { inherit wine; };
+          wineCuda = mkWine { inherit nvidiaLibs; };
+          bonsaiCuda = mkBonsai { wine = wineCuda; inherit nvidiaLibs cudaRedist; };
         in
         {
           inherit wine bonsai;
           default = bonsai;
+        }
+        # CUDA cannot work under FEX emulation (the x86_64 Wine process cannot load the
+        # host's aarch64 driver libraries), so the cuda variants are x86_64-only.
+        // nixpkgs.lib.optionalAttrs (!isArm) {
+          wine-cuda = wineCuda;
+          bonsai-cuda = bonsaiCuda;
+          nvidia-libs = nvidiaLibs;
+          nvcuda = nvcuda;
+          cuda-redist = cudaRedist;
         });
 
       homeManagerModules = {

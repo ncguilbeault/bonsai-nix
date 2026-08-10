@@ -126,6 +126,46 @@ let
     };
   };
 
+  nvidiaLibsSettings = {
+    options = {
+      enable = lib.mkEnableOption "nvidia-libs (CUDA, NVML, NVENC/NVDEC, OptiX and NvAPI support in the Wine prefix)";
+
+      version = lib.mkOption {
+        type = lib.types.str;
+        default = "1.0.2";
+        description = "nvidia-libs release version.";
+      };
+
+      sha256 = lib.mkOption {
+        type = lib.types.str;
+        default = "sha256-Aei7Y2jQiOItjo8dAklyFOjbQ2R2Ahcl7wwHB7fLFzg=";
+        description = "SRI hash body for the nvidia-libs release tarball.";
+      };
+
+      mirror = lib.mkOption {
+        type = lib.types.str;
+        default = "https://github.com/SveSop/nvidia-libs/releases/download";
+        description = "Mirror for the nvidia-libs release tarball.";
+      };
+    };
+  };
+
+  cudaRuntimeSettings = {
+    options = {
+      enable = lib.mkEnableOption "Windows CUDA toolkit runtime DLLs (cudart, cuBLAS, cuFFT, cuRAND, NVRTC, cuDNN) in the Wine prefix";
+
+      package = lib.mkOption {
+        type = lib.types.nullOr lib.types.package;
+        default = null;
+        description = ''
+          Package providing the runtime DLLs under x64/. When null, the default
+          component set pinned in nix/cuda-redist.nix (CUDA 12.x + cuDNN 9) is used.
+          Override to change component versions, e.g. for a CUDA 13 ONNX Runtime build.
+        '';
+      };
+    };
+  };
+
   isArm = pkgs.stdenv.hostPlatform.system == "aarch64-linux";
   winePkgs = if isArm then self.inputs.nixpkgs.legacyPackages.x86_64-linux else pkgs;
   
@@ -140,6 +180,18 @@ let
     else if isArm then "${fex}/bin/FEXInterpreter"
     else null;
 
+  nvidiaLibsPackage =
+    if cfg.nvidiaLibs.enable
+    then pkgs.callPackage "${self}/nix/nvidia-libs.nix" { } {
+      inherit (cfg.nvidiaLibs) version sha256 mirror;
+    }
+    else null;
+
+  cudaRedistPackage =
+    if !cfg.cudaRuntime.enable then null
+    else if cfg.cudaRuntime.package != null then cfg.cudaRuntime.package
+    else pkgs.callPackage "${self}/nix/cuda-redist.nix" { } { };
+
   wineArgs = {
     inherit (cfg.wine)
       version sha256 variant mirror patches replaceUpstreamPatches
@@ -147,6 +199,7 @@ let
     inherit (cfg) prefixName;
     prefixPath = cfg.winePrefixes;
     inherit winePkgs emulator;
+    nvidiaLibs = nvidiaLibsPackage;
   };
 
   bonsaiArgs = {
@@ -156,6 +209,8 @@ let
       installerArgs extraEnv bundleWine;
     inherit (cfg) prefixName;
     prefixPath = cfg.winePrefixes;
+    nvidiaLibs = nvidiaLibsPackage;
+    cudaRedist = cudaRedistPackage;
   };
 
   winePackage = pkgs.callPackage "${self}/nix/wine.nix" { } wineArgs;
@@ -206,6 +261,18 @@ in
       type = lib.types.submodule bonsaiSettings;
       default = { };
       description = "Bonsai installer/runtime configuration.";
+    };
+
+    nvidiaLibs = lib.mkOption {
+      type = lib.types.submodule nvidiaLibsSettings;
+      default = { };
+      description = "nvidia-libs (CUDA support) configuration. Requires the proprietary NVIDIA driver on the host.";
+    };
+
+    cudaRuntime = lib.mkOption {
+      type = lib.types.submodule cudaRuntimeSettings;
+      default = { };
+      description = "Windows CUDA toolkit runtime DLLs installed into the prefix. Only useful together with nvidiaLibs.enable.";
     };
   };
 
