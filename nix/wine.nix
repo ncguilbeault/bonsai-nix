@@ -27,6 +27,11 @@
 let
   isMac = pkgs.stdenv.hostPlatform.isDarwin;
 
+  # zenity only serves winetricks' GUI mode but drags the GTK/libadwaita/appstream
+  # stack into the closure, which does not build on darwin; stub it out there and
+  # let winetricks run in console mode.
+  winetricks' = if isMac then winetricks.override { zenity = pkgs.emptyDirectory; } else winetricks;
+
   baseFor = v:
     let
       # The wayland variant is meaningless on macOS, where wine draws via the Mac/X11 drivers.
@@ -155,7 +160,7 @@ let
     export WINE="${wineBinDir}/wine"
     export WINESERVER="${wineBinDir}/wineserver"
     export WINETRICKS_WINE="${wineBinDir}/wine"
-    exec ${winetricks}/bin/winetricks "$@"
+    exec ${winetricks'}/bin/winetricks "$@"
   '';
 in
 
