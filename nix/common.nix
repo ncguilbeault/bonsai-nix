@@ -166,8 +166,14 @@ let
     };
   };
 
-  isArm = pkgs.stdenv.hostPlatform.system == "aarch64-linux";
-  winePkgs = if isArm then self.inputs.nixpkgs.legacyPackages.x86_64-linux else pkgs;
+  hostSystem = pkgs.stdenv.hostPlatform.system;
+  isArm = hostSystem == "aarch64-linux";
+  # Wine has no native arm64 build on either kernel: aarch64-linux runs the x86_64-linux
+  # build through FEX, aarch64-darwin runs the x86_64-darwin build through Rosetta 2.
+  winePkgs =
+    if hostSystem == "aarch64-linux" then self.inputs.nixpkgs.legacyPackages.x86_64-linux
+    else if hostSystem == "aarch64-darwin" then self.inputs.nixpkgs.legacyPackages.x86_64-darwin
+    else pkgs;
   
   fex = (pkgs.fex.override { withQt = false; }).overrideAttrs (old: {
     cmakeFlags = old.cmakeFlags ++ [ "-DTUNE_CPU=none" ];

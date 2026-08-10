@@ -25,10 +25,14 @@
 }:
 
 let
+  isMac = pkgs.stdenv.hostPlatform.isDarwin;
+
   baseFor = v:
     let
+      # The wayland variant is meaningless on macOS, where wine draws via the Mac/X11 drivers.
       table = with winePkgs; {
-        "full"        = wineWow64Packages.full;
+        "full" = wineWow64Packages.full;
+      } // lib.optionalAttrs (!isMac) {
         "waylandFull" = wineWow64Packages.waylandFull;
       };
     in
@@ -155,6 +159,8 @@ let
   '';
 in
 
+assert lib.assertMsg (nvidiaLibs == null || !isMac)
+  "bonsai-nix: nvidia-libs dlopens the Linux NVIDIA driver and cannot work on macOS; use the non-cuda packages instead.";
 symlinkJoin {
   name = "wine-${version}";
   paths = binShims ++ lib.optional withWinetricks winetricksShim;
@@ -165,7 +171,7 @@ symlinkJoin {
 
   meta = {
     description = "Patched Wine ${version} (${variant})";
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ lib.platforms.darwin;
     mainProgram = "wine";
   };
 }

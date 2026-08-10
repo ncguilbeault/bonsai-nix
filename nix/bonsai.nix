@@ -161,7 +161,7 @@ symlinkJoin {
   meta = {
     description = "Bonsai-rx ${version} installed into a Wine prefix";
     homepage = "https://bonsai-rx.org/";
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ lib.platforms.darwin;
     mainProgram = "bonsai";
   };
 }

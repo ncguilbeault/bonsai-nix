@@ -7,7 +7,7 @@
 
   outputs = { self, nixpkgs, ... }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
       bonsaiVersion = "2.9.1";
       wineVersion = "11.12";
@@ -24,7 +24,13 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           isArm = system == "aarch64-linux";
-          winePkgs = if isArm then nixpkgs.legacyPackages.x86_64-linux else pkgs;
+          # Wine has no native arm64 build on either kernel: aarch64-linux runs the
+          # x86_64-linux build through FEX, aarch64-darwin runs the x86_64-darwin
+          # build through Rosetta 2 (transparent, so no emulator wrapper is needed).
+          winePkgs =
+            if system == "aarch64-linux" then nixpkgs.legacyPackages.x86_64-linux
+            else if system == "aarch64-darwin" then nixpkgs.legacyPackages.x86_64-darwin
+            else pkgs;
 
           fex = (pkgs.fex.override { withQt = false; }).overrideAttrs (old: {
             cmakeFlags = old.cmakeFlags ++ [ "-DTUNE_CPU=none" ];
@@ -87,9 +93,10 @@
           inherit wine bonsai;
           default = bonsai;
         }
-        # CUDA cannot work under FEX emulation (the x86_64 Wine process cannot load the
-        # host's aarch64 driver libraries), so the cuda variants are x86_64-only.
-        // nixpkgs.lib.optionalAttrs (!isArm) {
+        # The cuda variants are x86_64-linux-only: CUDA cannot work under FEX emulation
+        # (the x86_64 Wine process cannot load the host's aarch64 driver libraries), and
+        # nvidia-libs dlopens the Linux NVIDIA driver, which does not exist on macOS.
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           wine-cuda = wineCuda;
           bonsai-cuda = bonsaiCuda;
           nvidia-libs = nvidiaLibs;

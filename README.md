@@ -1,6 +1,6 @@
 # Bonsai - Nix Flake
 
-A Nix flake that installs [Bonsai-rx](https://bonsai-rx.org/) on Linux via a patched Wine build.
+A Nix flake that installs [Bonsai-rx](https://bonsai-rx.org/) on Linux and macOS via a patched Wine build.
 
 ## What it provides
 
@@ -47,7 +47,11 @@ On the first run, `bonsai-setup` installs the libraries into the prefix the same
 
 nvidia-libs only covers the driver-level libraries. Applications built on the CUDA *toolkit* — for example ONNX Runtime's CUDA execution provider — additionally expect the toolkit runtime DLLs (`cudart64_*`, `cublas64_*`, `cublasLt64_*`, `cufft64_*`, `curand64_*`, `nvrtc64_*`, `cudnn64_9` and its `cudnn_*` sublibraries), which on Windows every application must ship or install separately. The `bonsai-cuda` variant therefore also installs `packages.cuda-redist` into the prefix: the DLLs are collected from NVIDIA's official redistributable archives (component versions and hashes pinned in `nix/cuda-redist.nix`, defaulting to CUDA 12.x + cuDNN 9, ~2.6 GB installed) and symlinked into `system32` under a `.bonsai-cuda-redist-<version>` marker. No DLL overrides are needed for these since Wine has no builtins for them. In the modules this is `programs.bonsai.cudaRuntime.enable`; the component set can be swapped via `programs.bonsai.cudaRuntime.package` (e.g. for a CUDA 13 ONNX Runtime build).
 
-Requirements: the proprietary NVIDIA driver on the host (branch 580+ recommended by upstream) and an x86_64 host. The cuda variants are not exposed on aarch64, since CUDA cannot function under FEX emulation (the emulated x86_64 Wine process cannot load the host's aarch64 driver libraries).
+Requirements: the proprietary NVIDIA driver on the host (branch 580+ recommended by upstream) and an x86_64 Linux host. The cuda variants are not exposed on aarch64-linux, since CUDA cannot function under FEX emulation (the emulated x86_64 Wine process cannot load the host's aarch64 driver libraries), nor on macOS, where the Linux driver libraries that nvidia-libs dlopens do not exist.
+
+## macOS
+
+The flake exposes `x86_64-darwin` and `aarch64-darwin` outputs for the non-cuda packages. Wine has no native arm64 macOS build, so on Apple Silicon the flake reuses the `x86_64-darwin` Wine build, whose binaries run transparently under Rosetta 2. Building (or substituting) that package on an Apple Silicon machine requires Rosetta to be installed (`softwareupdate --install-rosetta`) and `extra-platforms = x86_64-darwin` in `nix.conf`. Only the `full` wine variant is available on macOS; `waylandFull` is Linux-only, as are the NixOS module and the `-cuda` packages.
 
 ## Patching Wine
 
