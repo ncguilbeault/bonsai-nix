@@ -150,17 +150,57 @@ let
     };
   };
 
+  cudaRedistComponent = {
+    options = {
+      name = lib.mkOption {
+        type = lib.types.str;
+        description = "Component name (e.g. cuda_cudart, libcublas, cudnn).";
+      };
+
+      path = lib.mkOption {
+        type = lib.types.str;
+        description = "Archive path relative to the mirror, as listed in NVIDIA's redist manifest.";
+      };
+
+      sha256 = lib.mkOption {
+        type = lib.types.str;
+        description = "SRI hash of the archive.";
+      };
+    };
+  };
+
   cudaRuntimeSettings = {
     options = {
       enable = lib.mkEnableOption "Windows CUDA toolkit runtime DLLs (cudart, cuBLAS, cuFFT, cuRAND, NVRTC, cuDNN) in the Wine prefix";
+
+      version = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Version label for the component set. When null, the default pinned in nix/cuda-redist.nix is used.";
+      };
+
+      mirror = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Base URL for the NVIDIA redist archives. When null, the default pinned in nix/cuda-redist.nix is used.";
+      };
+
+      components = lib.mkOption {
+        type = lib.types.nullOr (lib.types.listOf (lib.types.submodule cudaRedistComponent));
+        default = null;
+        description = ''
+          Redist archives to fetch; the 64-bit DLLs from each are collected under x64/.
+          When null, the default component set pinned in nix/cuda-redist.nix (CUDA 12.x + cuDNN 9) is used.
+          Set to change component versions, e.g. for a CUDA 13 ONNX Runtime build.
+        '';
+      };
 
       package = lib.mkOption {
         type = lib.types.nullOr lib.types.package;
         default = null;
         description = ''
-          Package providing the runtime DLLs under x64/. When null, the default
-          component set pinned in nix/cuda-redist.nix (CUDA 12.x + cuDNN 9) is used.
-          Override to change component versions, e.g. for a CUDA 13 ONNX Runtime build.
+          Package providing the runtime DLLs under x64/. When set, it is used as-is
+          and version, mirror and components are ignored.
         '';
       };
     };
@@ -193,10 +233,15 @@ let
     }
     else null;
 
+  # Only non-null settings are passed through so nix/cuda-redist.nix keeps its own defaults.
+  cudaRedistArgs = lib.filterAttrs (_: v: v != null) {
+    inherit (cfg.cudaRuntime) version mirror components;
+  };
+
   cudaRedistPackage =
     if !cfg.cudaRuntime.enable then null
     else if cfg.cudaRuntime.package != null then cfg.cudaRuntime.package
-    else pkgs.callPackage "${self}/nix/cuda-redist.nix" { } { };
+    else pkgs.callPackage "${self}/nix/cuda-redist.nix" { } cudaRedistArgs;
 
   wineArgs = {
     inherit (cfg.wine)
