@@ -138,3 +138,108 @@ nix/
   hm-module.nix       # Home Manager wrapper (writes home.packages)
   nixos-module.nix    # NixOS wrapper (writes environment.systemPackages)
 ```
+
+## Installing from Binary Cache
+
+This procedure builds the `bonsai` package into a signed binary cache on a USB drive, from which another x86_64-linux machine installs it without building. The examples use `/dev/sda` for the drive and `/run/media/$USER/BONSAI-NIX` for its mount point.
+
+### Step 1 — build
+
+Build before touching the drive, so that a failed build does not leave it wiped. This is the slow step.
+
+```shell
+nix build github:ncguilbeault/bonsai-nix#bonsai --out-link ~/bonsai-cache
+nix path-info -Sh ~/bonsai-cache
+```
+
+### Step 2 — signing key (once, reuse for every drive)
+
+Keep the secret key off the drives. Regenerating it invalidates drives made with the old key.
+
+```shell
+mkdir -p ~/.keys
+nix-store --generate-binary-cache-key bonsai-usb-1 ~/.keys/bonsai-usb.sec ~/.keys/bonsai-usb.pub
+chmod 600 ~/.keys/bonsai-usb.sec
+cat ~/.keys/bonsai-usb.pub
+```
+
+### Step 3 — find the drive, wipe it and repartition
+
+List the drives visible on the system and identify the USB drive. Every later step uses its device path, and the wrong path destroys the data on another drive.
+
+```shell
+lsblk -o NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT,TRAN,RM,MODEL,SERIAL
+```
+
+Unmount the drive if it is mounted (no root needed):
+
+```shell
+udisksctl unmount -b /dev/sda1
+```
+
+Confirm the device once more, then wipe and partition it:
+
+```shell
+lsblk -o PATH,SIZE,TRAN,RM,MODEL,SERIAL /dev/sda   # CONFIRM CORRECT DRIVE
+
+sudo wipefs -a /dev/sda
+sudo sfdisk /dev/sda <<'EOF'
+label: gpt
+start=1MiB, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name="bonsai-cache"
+EOF
+sync && sudo udevadm settle
+```
+
+The Microsoft-basic-data type GUID is what makes the partition recognisable on Windows and macOS as well as Linux.
+
+### Step 4 — format exFAT
+
+Format using `mkfs.exfat`. The label is capped at 11 characters, hence BONSAI-NIX:
+
+```shell
+MKFS="$(nix build --no-link --print-out-paths 'nixpkgs#exfatprogs^out')/bin/mkfs.exfat"
+sudo "$MKFS" -L BONSAI-NIX /dev/sda1
+sync && sudo udevadm settle
+```
+
+### Step 5 — mount and copy the closure
+
+```shell
+udisksctl mount -b /dev/sda1
+
+nix copy \
+  --to "file:///run/media/$USER/BONSAI-NIX/bonsai-cache?compression=zstd&secret-key=$HOME/.keys/bonsai-usb.sec" \
+  github:ncguilbeault/bonsai-nix#bonsai
+```
+
+### Step 6 — ship the public key and instructions alongside it
+
+```shell
+cp ~/.keys/bonsai-usb.pub "/run/media/$USER/BONSAI-NIX/"
+
+cat > "/run/media/$USER/BONSAI-NIX/README.md" <<EOF
+# Bonsai binary cache (x86_64-linux)
+
+Prebuilt closure for \`github:ncguilbeault/bonsai-nix#bonsai\`, for x86_64-linux only.
+
+Public key: $(cat ~/.keys/bonsai-usb.pub)
+
+## Install
+
+Run from the root of this drive, as root or as a user listed in Nix's \`trusted-users\`. A non-trusted user's \`--extra-substituters\` is ignored silently and the package is rebuilt from source.
+
+    nix profile install github:ncguilbeault/bonsai-nix#bonsai \\
+      --extra-substituters "file://\$(pwd)/bonsai-cache" \\
+      --extra-trusted-public-keys "$(cat ~/.keys/bonsai-usb.pub)"
+EOF
+```
+
+### Step 7 — flush and eject
+
+exFAT writes are heavily buffered; skipping the sync risks a truncated cache. This step can take some time.
+
+```shell
+sync
+udisksctl unmount -b /dev/sda1
+udisksctl power-off -b /dev/sda
+```
