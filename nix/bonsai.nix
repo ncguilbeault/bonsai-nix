@@ -19,6 +19,9 @@
 , prefixPath ? "$HOME/.local/share/wineprefixes"
 , nvidiaLibs ? null
 , cudaRedist ? null
+, python ? null
+, pythonInstallerArgs ? [ "/quiet" "InstallAllUsers=1" "PrependPath=1" "Include_test=0" "Include_launcher=0" ]
+, pythonPackages ? [ ]
 }:
 
 let
@@ -89,6 +92,30 @@ let
     fi
   '';
 
+  # Runs the python.org installer unattended inside the prefix. With InstallAllUsers=1 and
+  # PrependPath=1 it lands in C:\Program Files\Python<XY> and prepends itself to the system
+  # PATH in the registry, which is how Bonsai.Scripting.Python locates the runtime. The
+  # marker is version-tagged so a version bump installs the new release alongside the old
+  # one. pythonPackages are installed with pip afterwards under a marker keyed on the list,
+  # so changing the list re-runs pip (already satisfied packages are skipped).
+  pythonBlock = lib.optionalString (python != null) ''
+    python_marker="$WINEPREFIX/.bonsai-python-${python.version}"
+    if [ ! -e "$python_marker" ]; then
+      echo "bonsai-setup: installing Python ${python.version}"
+      wine ${lib.escapeShellArg python} ${lib.concatStringsSep " " (map lib.escapeShellArg pythonInstallerArgs)}
+      wineserver -w
+      touch "$python_marker"
+    fi
+  '' + lib.optionalString (python != null && pythonPackages != [ ]) ''
+    pip_marker="$WINEPREFIX/.bonsai-python-${python.version}-pip-${builtins.hashString "sha256" (lib.concatStringsSep " " pythonPackages)}"
+    if [ ! -e "$pip_marker" ]; then
+      echo "bonsai-setup: installing Python packages (${lib.concatStringsSep " " pythonPackages})"
+      wine 'C:\Program Files\${python.homeDirName}\python.exe' -m pip install --no-input \
+        ${lib.concatStringsSep " " (map lib.escapeShellArg pythonPackages)}
+      touch "$pip_marker"
+    fi
+  '';
+
   setup = writeShellScriptBin "bonsai-setup" ''
     set -euo pipefail
 
@@ -113,6 +140,8 @@ let
     ${nvidiaLibsBlock}
 
     ${cudaRedistBlock}
+
+    ${pythonBlock}
 
     install_marker="$WINEPREFIX/.bonsai-installed-${version}"
     if [ ! -e "$install_marker" ]; then
@@ -144,6 +173,8 @@ let
       lib.optionalString (nvidiaLibs != null) " || [ ! -e \"$WINEPREFIX/.bonsai-nvlibs-${nvidiaLibs.version}\" ]"
     }${
       lib.optionalString (cudaRedist != null) " || [ ! -e \"$WINEPREFIX/.bonsai-cuda-redist-${cudaRedist.version}\" ]"
+    }${
+      lib.optionalString (python != null) " || [ ! -e \"$WINEPREFIX/.bonsai-python-${python.version}\" ]"
     }; then
       echo "bonsai: prefix not initialized; running bonsai-setup..."
       ${setup}/bin/bonsai-setup
@@ -158,7 +189,7 @@ symlinkJoin {
   paths = [ setup launch ] ++ lib.optional bundleWine wine;
 
   passthru = {
-    inherit installer wine version nvidiaLibs cudaRedist;
+    inherit installer wine version nvidiaLibs cudaRedist python;
   };
 
   meta = {

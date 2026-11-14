@@ -16,6 +16,8 @@
       wineSha256 = "sha256-07wJEZLZhYRsnyAGXMgfITMfAeIrc2sTHjRJ4TBmcbw=";
       bonsaiSha256 = "sha256-d3b5oOZTiLlDgLPLlMHJyXdqBvuN+6WlcYDnVpS08NI=";
       nvidiaLibsSha256 = "sha256-Aei7Y2jQiOItjo8dAklyFOjbQ2R2Ahcl7wwHB7fLFzg=";
+      pythonVersion = "3.12.10";
+      pythonSha256 = "sha256-Z7VjXoDqUQcrh5QTEtAOyJJ8Tbm6GJOPetLSezKLlfs=";
       cudaRedistVersion = "12.8-cudnn9.25.0";
       cudaRedistComponents = [
         {
@@ -97,6 +99,11 @@
             components = cudaRedistComponents;
           };
 
+          python = pkgs.callPackage ./nix/python.nix { } {
+            version = pythonVersion;
+            sha256 = pythonSha256;
+          };
+
           # Variant constructors: the wine/bonsai builds are shared across variants;
           # only the shim environment and prefix bootstrap differ.
           mkWine = { nvidiaLibs ? null }: pkgs.callPackage ./nix/wine.nix { } {
@@ -111,22 +118,26 @@
             inherit nvidiaLibs;
           };
 
-          mkBonsai = { wine, nvidiaLibs ? null, cudaRedist ? null }: pkgs.callPackage ./nix/bonsai.nix { inherit wine; } {
+          mkBonsai = { wine, nvidiaLibs ? null, cudaRedist ? null, python ? null }: pkgs.callPackage ./nix/bonsai.nix { inherit wine; } {
             version = bonsaiVersion;
             sha256 = bonsaiSha256;
             prefixName = prefixName;
             prefixPath = prefixPath;
-            inherit nvidiaLibs cudaRedist;
+            inherit nvidiaLibs cudaRedist python;
           };
 
           wine = mkWine { };
           bonsai = mkBonsai { inherit wine; };
+          bonsaiPython = mkBonsai { inherit wine python; };
           wineCuda = mkWine { inherit nvidiaLibs; };
           bonsaiCuda = mkBonsai { wine = wineCuda; inherit nvidiaLibs cudaRedist; };
+          bonsaiCudaPython = mkBonsai { wine = wineCuda; inherit nvidiaLibs cudaRedist python; };
         in
         {
           inherit wine bonsai;
           default = bonsai;
+          bonsai-python = bonsaiPython;
+          python-installer = python;
         }
         # The cuda variants are x86_64-linux-only: CUDA cannot work under FEX emulation
         # (the x86_64 Wine process cannot load the host's aarch64 driver libraries), and
@@ -134,6 +145,7 @@
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           wine-cuda = wineCuda;
           bonsai-cuda = bonsaiCuda;
+          bonsai-cuda-python = bonsaiCudaPython;
           nvidia-libs = nvidiaLibs;
           nvcuda = nvcuda;
           cuda-redist = cudaRedist;

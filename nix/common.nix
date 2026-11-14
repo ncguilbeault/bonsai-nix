@@ -206,6 +206,43 @@ let
     };
   };
 
+  pythonSettings = {
+    options = {
+      enable = lib.mkEnableOption "a python.org Windows Python install in the Wine prefix (for Bonsai.Scripting.Python)";
+
+      version = lib.mkOption {
+        type = lib.types.str;
+        default = "3.12.10";
+        description = "Python release to install. Must have a Windows amd64 installer on python.org (patch releases past the binary cutoff of a series do not).";
+      };
+
+      sha256 = lib.mkOption {
+        type = lib.types.str;
+        default = "sha256-Z7VjXoDqUQcrh5QTEtAOyJJ8Tbm6GJOPetLSezKLlfs=";
+        description = "SRI hash of the python-<version>-amd64.exe installer.";
+      };
+
+      mirror = lib.mkOption {
+        type = lib.types.str;
+        default = "https://www.python.org/ftp/python";
+        description = "Base URL for the python.org release tree.";
+      };
+
+      installerArgs = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "/quiet" "InstallAllUsers=1" "PrependPath=1" "Include_test=0" "Include_launcher=0" ];
+        description = "Arguments passed to the Python installer. Keep InstallAllUsers=1 and PrependPath=1 so Bonsai can find the runtime on PATH.";
+      };
+
+      packages = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        example = [ "numpy" "scipy" ];
+        description = "pip requirement specifiers installed into the prefix's Python after the installer runs.";
+      };
+    };
+  };
+
   hostSystem = pkgs.stdenv.hostPlatform.system;
   isArm = hostSystem == "aarch64-linux";
   # Wine has no native arm64 build on either kernel: aarch64-linux runs the x86_64-linux
@@ -243,6 +280,13 @@ let
     else if cfg.cudaRuntime.package != null then cfg.cudaRuntime.package
     else pkgs.callPackage "${self}/nix/cuda-redist.nix" { } cudaRedistArgs;
 
+  pythonPackage =
+    if cfg.python.enable
+    then pkgs.callPackage "${self}/nix/python.nix" { } {
+      inherit (cfg.python) version sha256 mirror;
+    }
+    else null;
+
   wineArgs = {
     inherit (cfg.wine)
       version sha256 variant mirror patches replaceUpstreamPatches
@@ -262,6 +306,9 @@ let
     prefixPath = cfg.winePrefixes;
     nvidiaLibs = nvidiaLibsPackage;
     cudaRedist = cudaRedistPackage;
+    python = pythonPackage;
+    pythonInstallerArgs = cfg.python.installerArgs;
+    pythonPackages = cfg.python.packages;
   };
 
   winePackage = pkgs.callPackage "${self}/nix/wine.nix" { } wineArgs;
@@ -324,6 +371,12 @@ in
       type = lib.types.submodule cudaRuntimeSettings;
       default = { };
       description = "Windows CUDA toolkit runtime DLLs installed into the prefix. Only useful together with nvidiaLibs.enable.";
+    };
+
+    python = lib.mkOption {
+      type = lib.types.submodule pythonSettings;
+      default = { };
+      description = "Windows Python installed into the prefix by bonsai-setup, for use with Bonsai.Scripting.Python.";
     };
   };
 

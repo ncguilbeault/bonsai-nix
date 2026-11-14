@@ -9,10 +9,12 @@ A Nix flake that installs [Bonsai-rx](https://bonsai-rx.org/) on Linux and macOS
 - `packages.bonsai-cuda` / `packages.wine-cuda` — the same launcher and Wine build with [nvidia-libs](https://github.com/SveSop/nvidia-libs) (CUDA, NVML, NVENC/NVDEC, OptiX, NvAPI) and the Windows CUDA toolkit runtime DLLs bootstrapped into the Wine prefix on first run.
 - `packages.nvidia-libs` — the unpacked nvidia-libs release bundle (useful on its own for other prefixes).
 - `packages.cuda-redist` — the Windows CUDA runtime and cuDNN DLLs collected from NVIDIA's official redistributable archives.
+- `packages.bonsai-python` / `packages.bonsai-cuda-python` — the same launchers with a python.org Windows Python installed into the Wine prefix on first run, for `Bonsai.Scripting.Python`.
+- `packages.python-installer` — the fetched python.org amd64 installer (useful on its own for other prefixes).
 - `homeManagerModules.bonsai` — a Home Manager module exposing `programs.bonsai`. Adds the resolved package to `home.packages`.
 - `nixosModules.bonsai` — a NixOS module exposing the same `programs.bonsai` interface. Adds the resolved package to `environment.systemPackages` for a system-wide install.
 
-Both modules share a common backbone (`nix/common.nix`) that declares submodule options under `programs.bonsai.wine` (version, sha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraEnv, winePrefixes, prefixName), `programs.bonsai.bonsai` (version, sha256, mirror, prefixName, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, installerArgs, extraEnv, bundleWine, winePrefixes) `programs.bonsai.nvidiaLibs` (enable, version, sha256, mirror) and `programs.bonsai.cudaRuntime` (enable, package), plus an `installWine` toggle declared by each install-site wrapper.
+Both modules share a common backbone (`nix/common.nix`) that declares submodule options under `programs.bonsai.wine` (version, sha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraEnv, winePrefixes, prefixName), `programs.bonsai.bonsai` (version, sha256, mirror, prefixName, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, installerArgs, extraEnv, bundleWine, winePrefixes) `programs.bonsai.nvidiaLibs` (enable, version, sha256, mirror), `programs.bonsai.cudaRuntime` (enable, package) and `programs.bonsai.python` (enable, version, sha256, mirror, installerArgs, packages), plus an `installWine` toggle declared by each install-site wrapper.
 
 ## Quick start
 
@@ -64,6 +66,23 @@ On the first run, `bonsai-setup` installs the libraries into the prefix the same
 nvidia-libs only covers the driver-level libraries. Applications built on the CUDA *toolkit* — for example ONNX Runtime's CUDA execution provider — additionally expect the toolkit runtime DLLs (`cudart64_*`, `cublas64_*`, `cublasLt64_*`, `cufft64_*`, `curand64_*`, `nvrtc64_*`, `cudnn64_9` and its `cudnn_*` sublibraries), which on Windows every application must ship or install separately. The `bonsai-cuda` variant therefore also installs `packages.cuda-redist` into the prefix: the DLLs are collected from NVIDIA's official redistributable archives (component versions and hashes pinned in `nix/cuda-redist.nix`, defaulting to CUDA 12.x + cuDNN 9, ~2.6 GB installed) and symlinked into `system32` under a `.bonsai-cuda-redist-<version>` marker. No DLL overrides are needed for these since Wine has no builtins for them. In the modules this is `programs.bonsai.cudaRuntime.enable`; the component set can be swapped via `programs.bonsai.cudaRuntime.package` (e.g. for a CUDA 13 ONNX Runtime build).
 
 Requirements: the proprietary NVIDIA driver on the host (branch 580+ recommended by upstream) and an x86_64 Linux host. The cuda variants are not exposed on aarch64-linux, since CUDA cannot function under FEX emulation (the emulated x86_64 Wine process cannot load the host's aarch64 driver libraries), nor on macOS, where the Linux driver libraries that nvidia-libs dlopens do not exist.
+
+## Python in the prefix (Bonsai.Scripting.Python)
+
+The `-python` package variants (and the `programs.bonsai.python.enable` module option) run the official python.org Windows installer inside the prefix on first run, unattended (`/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 Include_launcher=0` by default). This installs to `C:\Program Files\Python<XY>` and prepends it to the system `PATH` in the prefix registry, which is how `Bonsai.Scripting.Python` finds the runtime when `PythonHome` is left empty: it searches `PATH` for `python.exe` and derives the DLL name (`python312.dll`) from the install directory's leaf name. Keep `InstallAllUsers=1` and `PrependPath=1` if you change `installerArgs`. The default is Python 3.12.10, the last 3.12 release with Windows binaries; pythonnet 3.0.5 (used by Bonsai.Scripting.Python) supports 3.7 through 3.13.
+
+```sh
+nix profile install github:ncguilbeault/bonsai-nix#bonsai-python
+# or via the modules:
+# programs.bonsai.python.enable = true;
+# programs.bonsai.python.packages = [ "numpy" ];
+```
+
+The step runs under a `.bonsai-python-<version>` marker, so bumping `version` (and `sha256`) installs the new release next to the old one. `packages` is a list of pip requirement specifiers installed afterwards with the prefix's `python -m pip`; it runs under a marker keyed on the list, so editing the list re-runs pip. The prefix's Python is also reachable from the shell through the wine shim:
+
+```sh
+wine python -m pip install numpy
+```
 
 ## macOS
 
