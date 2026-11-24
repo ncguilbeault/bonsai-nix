@@ -244,6 +244,37 @@ let
     };
   };
 
+  gitSettings = {
+    options = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = cfg.python.enable;
+        defaultText = lib.literalExpression "config.programs.bonsai.python.enable";
+        description = "Whether to put MinGit's git.exe on the prefix's PATH, so that pip and uv in the prefix can install git+https:// dependencies.";
+      };
+
+      version = lib.mkOption {
+        type = lib.types.str;
+        default = release.git.version;
+        defaultText = releaseText "git.version";
+        description = "MinGit version, as in the archive name MinGit-<version>-64-bit.zip.";
+      };
+
+      sha256 = lib.mkOption {
+        type = lib.types.str;
+        default = release.git.sha256;
+        defaultText = releaseText "git.sha256";
+        description = "SRI hash of the MinGit-<version>-64-bit.zip archive.";
+      };
+
+      mirror = lib.mkOption {
+        type = lib.types.str;
+        default = "https://github.com/git-for-windows/git/releases/download";
+        description = "Base URL for the Git for Windows release downloads.";
+      };
+    };
+  };
+
   pythonSettings = {
     options = {
       enable = lib.mkEnableOption "a python.org Windows Python install in the Wine prefix (for Bonsai.Scripting.Python)";
@@ -321,6 +352,13 @@ let
     else if cfg.cudaRuntime.package != null then cfg.cudaRuntime.package
     else pkgs.callPackage "${self}/nix/cuda-redist.nix" { } cudaRedistArgs;
 
+  gitPackage =
+    if cfg.git.enable
+    then pkgs.callPackage "${self}/nix/mingit.nix" { } {
+      inherit (cfg.git) version sha256 mirror;
+    }
+    else null;
+
   pythonPackage =
     if cfg.python.enable
     then pkgs.callPackage "${self}/nix/python.nix" { } {
@@ -357,6 +395,7 @@ let
     nvidiaLibs = nvidiaLibsPackage;
     cudaRedist = cudaRedistPackage;
     python = pythonPackage;
+    git = gitPackage;
     pythonInstallerArgs = cfg.python.installerArgs;
     pythonPackages = cfg.python.packages;
   };
@@ -421,6 +460,12 @@ in
       type = lib.types.submodule cudaRuntimeSettings;
       default = { };
       description = "Windows CUDA toolkit runtime DLLs installed into the prefix. Only useful together with nvidiaLibs.enable.";
+    };
+
+    git = lib.mkOption {
+      type = lib.types.submodule gitSettings;
+      default = { };
+      description = "MinGit (Git for Windows) put on the prefix's PATH by bonsai, bonsai-setup and bonsai-wine, for installing Python packages from git URLs.";
     };
 
     python = lib.mkOption {

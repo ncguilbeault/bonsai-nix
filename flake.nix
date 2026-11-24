@@ -61,6 +61,7 @@
           nvidiaLibsPins = uniquePins "nvidiaLibs" (p: p.version) (map (r: r.nvidiaLibs) releaseList);
           cudaRedistPins = uniquePins "cudaRedist" (p: p.version) (map (r: r.cudaRedist) releaseList);
           pythonPins = uniquePins "python" (p: p.version) (map (r: r.python) releaseList);
+          gitPins = uniquePins "git" (p: p.version) (map (r: r.git) releaseList);
           nvcudaPins = uniquePins "nvcuda" (p: p.rev) (map (r: r.nvcuda) (lib.filter (r: r ? nvcuda) releaseList));
 
           # Every dependency is built once per pin and shared by the release sets that use it.
@@ -113,6 +114,10 @@
             (_: pin: pkgs.callPackage ./nix/python.nix { } { inherit (pin) version sha256; })
             pythonPins;
 
+          gitByVersion = lib.mapAttrs
+            (_: pin: pkgs.callPackage ./nix/mingit.nix { } { inherit (pin) version sha256; })
+            gitPins;
+
           # The Bonsai packages of one release. A pinned release names its commands after the
           # version and defaults to a prefix of its own, so it installs next to the unversioned
           # packages and other pinned releases. Wine is not put on PATH by these packages; the
@@ -123,6 +128,7 @@
               nvidiaLibs = nvidiaLibsFor release;
               cudaRedist = cudaRedistByVersion.${release.cudaRedist.version};
               python = pythonByVersion.${release.python.version};
+              git = gitByVersion.${release.git.version};
 
               mkBonsai = args: pkgs.callPackage ./nix/bonsai.nix { wine = wineByVersion.${release.wine.version}; } ({
                 inherit version;
@@ -136,11 +142,11 @@
             {
               portable = {
                 bonsai = mkBonsai { };
-                bonsai-python = mkBonsai { inherit python; };
+                bonsai-python = mkBonsai { inherit python git; };
               };
               cuda = {
                 bonsai-cuda = mkBonsai { inherit nvidiaLibs cudaRedist; };
-                bonsai-cuda-python = mkBonsai { inherit nvidiaLibs cudaRedist python; };
+                bonsai-cuda-python = mkBonsai { inherit nvidiaLibs cudaRedist python git; };
               };
             };
 
@@ -161,9 +167,11 @@
           default = unversioned.portable.bonsai;
           wine = wineByVersion.${latest.wine.version};
           python-installer = pythonByVersion.${latest.python.version};
+          mingit = gitByVersion.${latest.git.version};
         }
         // versioned "wine" (lib.mapAttrs (version: mkWine "-${version}") winePins)
         // versioned "python-installer" pythonByVersion
+        // versioned "mingit" gitByVersion
         # The cuda variants are x86_64-linux-only: CUDA cannot work under FEX emulation
         # (the x86_64 Wine process cannot load the host's aarch64 driver libraries), and
         # nvidia-libs dlopens the Linux NVIDIA driver, which does not exist on macOS.

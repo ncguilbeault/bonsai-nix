@@ -8,21 +8,22 @@ Every package is built from the release sets in `nix/releases.nix`, each of whic
 
 - `packages.bonsai` (also `packages.default`) — the `bonsai` launcher, the `bonsai-setup` helper, which initializes the Wine prefix and installs Bonsai into it, and `bonsai-wine`, which runs a command (`winecfg`, `winetricks`, `wine ...`) with the release's Wine against that prefix. The Wine tools themselves are not put on `PATH`.
 - `packages.wine` — a patched WineHQ build (the Wine version and patches of the release set with the wine-staging patchset, nixpkgs `full` variant) exposed via shell shims: a `winetricks` shim and shims for `wine`, `wine64`, `wineboot`, `wineserver`, `winecfg`, `regedit`, `wineconsole`, `msiexec`, `winefile`, `notepad`, `uninstaller`, `winedbg`. It sets no `WINEPREFIX`, so Wine's own default prefix applies.
-- `packages.bonsai-python` — the same launcher with a python.org Windows Python installed into the Wine prefix by `bonsai-setup`, for `Bonsai.Scripting.Python`.
+- `packages.bonsai-python` — the same launcher with a python.org Windows Python installed into the Wine prefix by `bonsai-setup`, for `Bonsai.Scripting.Python`, and MinGit's `git.exe` on the prefix's `PATH`.
 - `packages.python-installer` — the fetched python.org amd64 installer (useful on its own for other prefixes).
+- `packages.mingit` — the unpacked [MinGit](https://gitforwindows.org/) release, a minimal Git for Windows (useful on its own for other prefixes).
 - `packages.bonsai-cuda` — the same launcher with [nvidia-libs](https://github.com/SveSop/nvidia-libs) (CUDA, NVML, NVENC/NVDEC, OptiX, NvAPI) and the Windows CUDA toolkit runtime DLLs installed into the Wine prefix by `bonsai-setup`.
 - `packages.bonsai-cuda-python` — `bonsai-cuda` with Python.
 - `packages.nvidia-libs` — the unpacked nvidia-libs release bundle (useful on its own for other prefixes). When the release set pins nvcuda, the bundle's `nvcuda.dll` is replaced by the source-built one.
 - `packages.cuda-redist` — the Windows CUDA runtime and cuDNN DLLs collected from NVIDIA's official redistributable archives.
 - `packages.<name>_<bonsai version>` (e.g. `bonsai_2_9_1`, `bonsai-python_2_9_1`, `bonsai-cuda_2_9_1`, `bonsai-cuda-python_2_9_1`) — each of the Bonsai packages above pinned to one release set.
-- `packages.<name>_<own version>` (e.g. `wine_11_22`, `nvidia-libs_1_0_5`, `cuda-redist_13_5_cudnn9_28_1`, `python-installer_3_12_10`) — each dependency pinned to one of its versions, built once and shared by the release sets that use it.
+- `packages.<name>_<own version>` (e.g. `wine_11_22`, `nvidia-libs_1_0_5`, `cuda-redist_13_5_cudnn9_28_1`, `python-installer_3_12_10`, `mingit_2_56_1`) — each dependency pinned to one of its versions, built once and shared by the release sets that use it.
 - `packages.nvcuda_<revision>` (e.g. `nvcuda_772b344`) — [nvcuda](https://github.com/SveSop/nvcuda) built from source at a pinned revision with that pin's patches. It exists only for revisions pinned by a release set, and an unversioned `packages.nvcuda` exists only when the latest release set pins nvcuda.
 - `homeManagerModules.bonsai` — a Home Manager module exposing `programs.bonsai`. Adds the resolved package to `home.packages`.
 - `nixosModules.bonsai` — a NixOS module exposing the same `programs.bonsai` interface. Adds the resolved package to `environment.systemPackages` for a system-wide install.
 
 The `cuda` packages (`bonsai-cuda`, `bonsai-cuda-python`, `nvidia-libs`, `nvcuda`, `cuda-redist` and their pinned forms) are exposed on `x86_64-linux` only.
 
-Both modules share a common backbone (`nix/common.nix`) that declares `programs.bonsai.enable`, `programs.bonsai.prefixName`, `programs.bonsai.winePrefixes`, the read-only `programs.bonsai.package` and `programs.bonsai.winePackage`, and submodule options under `programs.bonsai.wine` (version, sha256, stagingSha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraEnv, emulator), `programs.bonsai.bonsai` (version, sha256, mirror, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, windowsVersion, installerArgs, extraEnv, bundleWine), `programs.bonsai.nvidiaLibs` (enable, version, sha256, mirror), `programs.bonsai.cudaRuntime` (enable, version, mirror, components, package) and `programs.bonsai.python` (enable, version, sha256, mirror, installerArgs, packages). Each module adds `programs.bonsai.installWine`, which installs the Wine package as a separate entry when `bonsai.bundleWine` is false. Version and hash options default from the release set of `programs.bonsai.bonsai.version`.
+Both modules share a common backbone (`nix/common.nix`) that declares `programs.bonsai.enable`, `programs.bonsai.prefixName`, `programs.bonsai.winePrefixes`, the read-only `programs.bonsai.package` and `programs.bonsai.winePackage`, and submodule options under `programs.bonsai.wine` (version, sha256, stagingSha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraEnv, emulator), `programs.bonsai.bonsai` (version, sha256, mirror, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, windowsVersion, installerArgs, extraEnv, bundleWine), `programs.bonsai.nvidiaLibs` (enable, version, sha256, mirror), `programs.bonsai.cudaRuntime` (enable, version, mirror, components, package), `programs.bonsai.python` (enable, version, sha256, mirror, installerArgs, packages) and `programs.bonsai.git` (enable, version, sha256, mirror). Each module adds `programs.bonsai.installWine`, which installs the Wine package as a separate entry when `bonsai.bundleWine` is false. Version and hash options default from the release set of `programs.bonsai.bonsai.version`.
 
 ## Quick start
 
@@ -72,7 +73,8 @@ bonsai-wine wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d 
 - `nvidiaLibs` — the nvidia-libs release version and hash;
 - `nvcuda` — optional: the nvcuda revision, its hash and the patches for a source build. A release set without it uses the `nvcuda.dll` bundled with nvidia-libs;
 - `cudaRedist` — a version label and the CUDA runtime and cuDNN archives (name, path and hash of each);
-- `python` — the python.org Windows Python version and installer hash.
+- `python` — the python.org Windows Python version and installer hash;
+- `git` — the MinGit version and archive hash.
 
 Each dependency pin is bound once in the `let` block at the top of the file (`wine_11_22`, `nvidiaLibs_1_0_5`, `nvcuda_772b344`, ...) and referenced by name from the release sets that use it (`wine = wine_11_22;`).
 
@@ -80,16 +82,16 @@ Each dependency pin is bound once in the `let` block at the top of the file (`wi
 
 The Bonsai packages (`bonsai`, `bonsai-python`, `bonsai-cuda`, `bonsai-cuda-python`) are keyed by Bonsai version: the unversioned name builds the highest version listed, and `<name>_<bonsai version>` (dots replaced by underscores) builds one release set.
 
-Every dependency package is keyed by its own version: `wine_<version>`, `nvidia-libs_<version>`, `cuda-redist_<version label>`, `python-installer_<version>` and `nvcuda_<first seven characters of the revision>`, with dots and hyphens replaced by underscores. An nvidia-libs package that carries a source-built nvcuda is named `nvidia-libs_<version>_nvcuda_<revision>`. The unversioned names (`wine`, `nvidia-libs`, `cuda-redist`, `python-installer`, and `nvcuda` when the highest release set pins it) build the pins of the highest release set.
+Every dependency package is keyed by its own version: `wine_<version>`, `nvidia-libs_<version>`, `cuda-redist_<version label>`, `python-installer_<version>`, `mingit_<version>` and `nvcuda_<first seven characters of the revision>`, with dots and hyphens replaced by underscores. An nvidia-libs package that carries a source-built nvcuda is named `nvidia-libs_<version>_nvcuda_<revision>`. The unversioned names (`wine`, `nvidia-libs`, `cuda-redist`, `python-installer`, `mingit`, and `nvcuda` when the highest release set pins it) build the pins of the highest release set.
 
 Each pin is built once and shared by the release sets that use it:
 
-| Release | Wine | nvidia-libs | nvcuda | CUDA runtime | Python |
-| --- | --- | --- | --- | --- | --- |
-| 2.9.0 | `wine_11_8` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` |
-| 2.9.1 | `wine_11_12` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` |
-| 2.9.2 | `wine_11_22` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` |
-| 2.9.3 | `wine_11_22` | `nvidia-libs_1_0_5` | bundled with nvidia-libs | `cuda-redist_13_5_cudnn9_28_1` | `python-installer_3_12_10` |
+| Release | Wine | nvidia-libs | nvcuda | CUDA runtime | Python | Git |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2.9.0 | `wine_11_8` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` | `mingit_2_56_1` |
+| 2.9.1 | `wine_11_12` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` | `mingit_2_56_1` |
+| 2.9.2 | `wine_11_22` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` | `mingit_2_56_1` |
+| 2.9.3 | `wine_11_22` | `nvidia-libs_1_0_5` | bundled with nvidia-libs | `cuda-redist_13_5_cudnn9_28_1` | `python-installer_3_12_10` | `mingit_2_56_1` |
 
 Since a package name stands for one pin, the flake's packages fail to evaluate with an error when two release sets carry different pins for the same version of a dependency (or the same nvcuda revision).
 
@@ -118,7 +120,7 @@ WINEPREFIX=~/prefixes/test winecfg-11.12
 
 ### Releases in the modules
 
-`programs.bonsai.bonsai.version` selects the release set and defaults to the highest version listed. The Bonsai installer hash, `wine.version`, `wine.sha256`, `wine.stagingSha256`, `wine.patches`, `nvidiaLibs.version`, `nvidiaLibs.sha256`, `cudaRuntime.version`, `cudaRuntime.components`, `python.version` and `python.sha256` all default from that release set, so setting the Bonsai version alone selects a complete release:
+`programs.bonsai.bonsai.version` selects the release set and defaults to the highest version listed. The Bonsai installer hash, `wine.version`, `wine.sha256`, `wine.stagingSha256`, `wine.patches`, `nvidiaLibs.version`, `nvidiaLibs.sha256`, `cudaRuntime.version`, `cudaRuntime.components`, `python.version`, `python.sha256`, `git.version` and `git.sha256` all default from that release set, so setting the Bonsai version alone selects a complete release:
 
 ```nix
 programs.bonsai.bonsai.version = "2.9.1";
@@ -164,7 +166,7 @@ bash scripts/new-release.sh --hold-wine --hold-cuda --python 3.13 --write
 
 Builds the release set for a new Bonsai version. It prints the sources (version, URL and hash of each), the bindings to add to the `let` block, the release set, and notes on anything that needs attention. Nothing is written without `--write`. It refuses a Bonsai version that is already listed.
 
-Every dependency rolls forward by default: Bonsai, Wine and nvidia-libs to their latest release, nvcuda to the head of its default branch as a source build, CUDA to the latest NVIDIA manifests of the newest CUDA major version, and Python to the newest release that has a Windows installer. A dependency whose version matches the highest release set reuses that set's binding; otherwise a binding named after the version is reused if the file has one and added if not. A Wine binding that is added carries the patches of the highest release set's Wine binding. A new nvcuda revision starts with an empty patch list, since patches are tied to the revision they were written for.
+Every dependency rolls forward by default: Bonsai, Wine, nvidia-libs and MinGit to their latest release, nvcuda to the head of its default branch as a source build, CUDA to the latest NVIDIA manifests of the newest CUDA major version, and Python to the newest release that has a Windows installer. A dependency whose version matches the highest release set reuses that set's binding; otherwise a binding named after the version is reused if the file has one and added if not. A Wine binding that is added carries the patches of the highest release set's Wine binding. A new nvcuda revision starts with an empty patch list, since patches are tied to the revision they were written for.
 
 | Option | Effect |
 | --- | --- |
@@ -175,7 +177,8 @@ Every dependency rolls forward by default: Bonsai, Wine and nvidia-libs to their
 | `--nvcuda head\|bundled\|<rev>` | nvcuda revision to build from source: the branch head (default) or a given revision. `bundled` leaves nvcuda out of the release set, so the `nvcuda.dll` shipped with nvidia-libs is used. |
 | `--cuda-major <n>` | CUDA major version to stay within. Default: the newest major version. |
 | `--python <version>\|<major>[.<minor>]` | An exact Python version, or a major version (`3`) or series (`3.13`) to take the newest release of. |
-| `--hold-wine`, `--hold-nvidia-libs`, `--hold-nvcuda`, `--hold-cuda`, `--hold-python` | Keep that dependency as it is in the highest release set. |
+| `--git <version>` | MinGit version. |
+| `--hold-wine`, `--hold-nvidia-libs`, `--hold-nvcuda`, `--hold-cuda`, `--hold-python`, `--hold-git` | Keep that dependency as it is in the highest release set. |
 
 #### `scripts/latest-versions.sh`
 
@@ -189,7 +192,7 @@ Prints the latest upstream version of every dependency next to the pin of the hi
 
 #### `scripts/fetch-hashes.sh`
 
-Downloads every source pinned in `nix/releases.nix` and prints its hash, one block per release set, each line named after the field it belongs to (`bonsai.sha256`, `wine.sha256`, `wine.stagingSha256`, `nvidiaLibs.sha256`, `nvcuda.sha256`, `python.sha256`, `cudaRedist.components.<name>.sha256`) and followed by the version and URL it was computed from. A source shared by several release sets is downloaded once.
+Downloads every source pinned in `nix/releases.nix` and prints its hash, one block per release set, each line named after the field it belongs to (`bonsai.sha256`, `wine.sha256`, `wine.stagingSha256`, `nvidiaLibs.sha256`, `nvcuda.sha256`, `python.sha256`, `git.sha256`, `cudaRedist.components.<name>.sha256`) and followed by the version and URL it was computed from. A source shared by several release sets is downloaded once.
 
 | Option | Effect |
 | --- | --- |
@@ -236,6 +239,17 @@ The step runs under a `.bonsai-python-<version>` marker, so a different Python v
 ```sh
 bonsai-wine wine python -m pip install numpy
 ```
+
+### Git
+
+Installing a Python package from a git URL (`pip install git+https://...`, or the same with uv) runs `git`, which inside the prefix has to be a Windows `git.exe`. The `-python` package variants therefore put [MinGit](https://gitforwindows.org/), the minimal Git for Windows distribution, on the prefix's `PATH`. It is not installed into the prefix: `bonsai`, `bonsai-setup` and `bonsai-wine` export `WINEPATH` with MinGit's `cmd` directory in the Nix store, which Wine prepends to the `PATH` of the programs it starts. The MinGit version is pinned per release set.
+
+```sh
+bonsai-wine wine git --version
+bonsai-wine wine python -m pip install git+https://github.com/pypa/sampleproject
+```
+
+In the modules this is `programs.bonsai.git.enable`, which defaults to `programs.bonsai.python.enable`. A Wine command run outside `bonsai-wine` does not have git on its `PATH`.
 
 ## macOS
 
@@ -315,6 +329,7 @@ nix/
   nvcuda.nix          # SveSop/nvcuda built from source with patches
   cuda-redist.nix     # Windows CUDA/cuDNN runtime DLLs from NVIDIA redist archives
   python.nix          # python.org Windows installer fetch
+  mingit.nix          # MinGit (Git for Windows) release archive
   common.nix          # programs.bonsai options (defaults from releases.nix) + package construction
   hm-module.nix       # Home Manager wrapper (writes home.packages)
   nixos-module.nix    # NixOS wrapper (writes environment.systemPackages)

@@ -29,6 +29,8 @@
 , python ? null
 , pythonInstallerArgs ? [ "/quiet" "InstallAllUsers=1" "PrependPath=1" "Include_test=0" "Include_launcher=0" ]
 , pythonPackages ? [ ]
+# MinGit derivation (see nix/mingit.nix) whose git.exe is put on the prefix's PATH.
+, git ? null
 }:
 
 let
@@ -147,6 +149,13 @@ let
     fi
   '';
 
+  # WINEPATH is a semicolon-separated list of directories that Wine prepends to the PATH
+  # of the programs it starts, so git.exe is found without anything being installed into
+  # the prefix.
+  gitEnv = lib.optionalString (git != null) ''
+    export WINEPATH="${git}/cmd''${WINEPATH:+;$WINEPATH}"
+  '';
+
   # Shared preamble of every script: the prefix, the environment and this build's Wine on PATH.
   envSetup = ''
     set -euo pipefail
@@ -158,6 +167,7 @@ let
 
     ${envExports}
     ${nvidiaLibsEnv}
+    ${gitEnv}
     export PATH="${wine}/bin:$PATH"
   '';
 
@@ -234,7 +244,7 @@ symlinkJoin {
   paths = [ setup launch wineRun ] ++ lib.optional bundleWine wine;
 
   passthru = {
-    inherit installer wine version nvidiaLibs cudaRedist python;
+    inherit installer wine version nvidiaLibs cudaRedist python git;
   };
 
   meta = {

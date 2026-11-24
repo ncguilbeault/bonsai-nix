@@ -2,12 +2,13 @@
 # new-release.sh
 #
 # Usage:
-#   bash scripts/new-release.sh [--write] [--bonsai <version>] [--wine <version>] [--nvidia-libs <version>] [--nvcuda head|bundled|<rev>] [--cuda-major <n>] [--python <version>|<major>[.<minor>]] [--hold-wine] [--hold-nvidia-libs] [--hold-nvcuda] [--hold-cuda] [--hold-python]
+#   bash scripts/new-release.sh [--write] [--bonsai <version>] [--wine <version>] [--nvidia-libs <version>] [--nvcuda head|bundled|<rev>] [--cuda-major <n>] [--python <version>|<major>[.<minor>]] [--git <version>] [--hold-wine] [--hold-nvidia-libs] [--hold-nvcuda] [--hold-cuda] [--hold-python] [--hold-git]
 #
 # Builds the release set for a new Bonsai version. Versions come from scripts/latest-versions.sh and hashes from scripts/fetch-hashes.sh. The output lists the sources (version, URL and hash of each), then the bindings and the release set to add to nix/releases.nix, then any notes.
 #
 # Every dependency defaults to its latest upstream version:
-#   bonsai, wine, nvidia-libs  latest release
+#   bonsai, wine, nvidia-libs, git
+#                              latest release
 #   nvcuda                     head of the default branch, built from source with an empty patch list, since patches are tied to the revision they were written for
 #   cuda                       latest NVIDIA manifests of the newest CUDA major version, with hashes taken from the manifests
 #   python                     newest release with a Windows installer
@@ -23,7 +24,8 @@
 #   --cuda-major <n>           CUDA major version to take the latest manifests of
 #   --python <version>|<major>[.<minor>]
 #                              Python version, or a major version (3) or series (3.13) to take the newest release of
-#   --hold-wine, --hold-nvidia-libs, --hold-nvcuda, --hold-cuda, --hold-python
+#   --git <version>            MinGit version
+#   --hold-wine, --hold-nvidia-libs, --hold-nvcuda, --hold-cuda, --hold-python, --hold-git
 #                              keep that dependency as it is in the highest release set, including its patches
 #
 # A dependency whose version matches the highest release set reuses that set's binding. Otherwise a binding named after the version is reused if nix/releases.nix has one and added if not. The hash of a reused binding is checked against the fetched one and corrected when it differs.
@@ -42,12 +44,14 @@ bonsai=
 wine=
 nvidia_libs=
 python=
+git_version=
 nvcuda=head
 cuda_major=latest
 hold_wine=0
 hold_nvidia_libs=0
 hold_cuda=0
 hold_python=0
+hold_git=0
 while [ $# -gt 0 ]; do
   case $1 in
     --write) write=1; shift ;;
@@ -55,6 +59,7 @@ while [ $# -gt 0 ]; do
     --wine) wine=$2; shift 2 ;;
     --nvidia-libs) nvidia_libs=$2; shift 2 ;;
     --python) python=$2; shift 2 ;;
+    --git) git_version=$2; shift 2 ;;
     --nvcuda) nvcuda=$2; shift 2 ;;
     --cuda-major) cuda_major=$2; shift 2 ;;
     --hold-wine) hold_wine=1; shift ;;
@@ -62,6 +67,7 @@ while [ $# -gt 0 ]; do
     --hold-nvcuda) nvcuda=keep; shift ;;
     --hold-cuda) hold_cuda=1; shift ;;
     --hold-python) hold_python=1; shift ;;
+    --hold-git) hold_git=1; shift ;;
     *) echo "Error: unknown argument $1" >&2; exit 1 ;;
   esac
 done
@@ -86,9 +92,11 @@ bonsai=${bonsai:-$(get bonsai)}
 if [ "$hold_wine" = 1 ]; then wine=$(get pinned.wine); fi
 if [ "$hold_nvidia_libs" = 1 ]; then nvidia_libs=$(get pinned.nvidiaLibs); fi
 if [ "$hold_python" = 1 ]; then python=$(get pinned.python); fi
+if [ "$hold_git" = 1 ]; then git_version=$(get pinned.git); fi
 wine=${wine:-$(get wine)}
 nvidia_libs=${nvidia_libs:-$(get nvidiaLibs)}
 python=${python:-$(get python)}
+git_version=${git_version:-$(get git)}
 case $nvcuda in
   keep) nvcuda_rev=$(get pinned.nvcuda) ;;
   head) nvcuda_rev=$(get nvcudaHead) ;;
@@ -215,6 +223,18 @@ if [ "$emit" = 1 ]; then
 EOF
 fi
 
+choose git "$git_version" "$(get pinned.git)" "git_$(ident "$git_version")"
+git_ref=$ref
+if [ "$emit" = 1 ]; then
+  cat >>"$bindings" <<EOF
+
+  $ref = {
+    version = "$git_version";
+    sha256 = "@git.sha256@";
+  };
+EOF
+fi
+
 choose wine "$wine" "$(get pinned.wine)" "wine_$(ident "$wine")"
 wine_ref=$ref
 if [ "$emit" = 1 ]; then
@@ -241,6 +261,7 @@ cat >"$entry" <<EOF
 $nvcuda_line}
     cudaRedist = $cuda_ref;
     python = $python_ref;
+    git = $git_ref;
   };
 EOF
 
@@ -288,12 +309,13 @@ current=$(RELEASE=$bonsai nix eval --impure --raw --file "$candidate" --apply '
   + "nvidiaLibs.sha256 ${r.nvidiaLibs.sha256}\n"
   + "nvcuda.sha256 ${r.nvcuda.sha256 or ""}\n"
   + "python.sha256 ${r.python.sha256}\n"
+  + "git.sha256 ${r.git.sha256}\n"
 ')
 
 echo "Fetching sources..." >&2
 sources=$(bash "$scripts/fetch-hashes.sh" --file "$candidate" --release "$bonsai" --no-cuda)
 
-for field in bonsai.sha256 wine.sha256 wine.stagingSha256 nvidiaLibs.sha256 nvcuda.sha256 python.sha256; do
+for field in bonsai.sha256 wine.sha256 wine.stagingSha256 nvidiaLibs.sha256 nvcuda.sha256 python.sha256 git.sha256; do
   if [ "$field" = "nvcuda.sha256" ] && [ -z "$nvcuda_line" ]; then continue; fi
   fetched=$(sed -n "s/^  $field = \"\([^\"]*\)\";.*/\1/p" <<<"$sources")
   if [ -z "$fetched" ]; then

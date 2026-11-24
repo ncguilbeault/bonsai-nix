@@ -6,7 +6,7 @@
 #
 # Prints the sha256 hash of every source pinned in nix/releases.nix. Versions, revisions and archive paths are read from the release sets and each source is downloaded to compute its hash; a source shared by several release sets is downloaded once.
 #
-# Each release set is printed as a block with one line per source, named after the field the hash belongs to (bonsai.sha256, wine.sha256, wine.stagingSha256, nvidiaLibs.sha256, nvcuda.sha256, python.sha256, cudaRedist.components.<name>.sha256) and followed by a comment giving the version or revision and the URL or flake reference it was fetched from.
+# Each release set is printed as a block with one line per source, named after the field the hash belongs to (bonsai.sha256, wine.sha256, wine.stagingSha256, nvidiaLibs.sha256, nvcuda.sha256, python.sha256, git.sha256, cudaRedist.components.<name>.sha256) and followed by a comment giving the version or revision and the URL or flake reference it was fetched from.
 #
 # Options:
 #   --file <path>        read release sets from this file instead of nix/releases.nix
@@ -45,7 +45,11 @@ json_hash() { sed -n 's/.*"hash": *"\([^"]*\)".*/\1/p'; }
 sources=$(nix eval --raw --file "$releases_file" --apply '
   releases:
   let
-    inherit (builtins) attrNames concatMap concatStringsSep elemAt sort splitVersion compareVersions;
+    inherit (builtins) attrNames concatMap concatStringsSep elemAt length sort splitVersion compareVersions;
+    # A Git for Windows release is tagged v<git version>.windows.<n>; a MinGit version of three components is build 1 and a fourth component is the build number.
+    gitTag = v:
+      let parts = splitVersion v;
+      in "v${elemAt parts 0}.${elemAt parts 1}.${elemAt parts 2}.windows.${if length parts > 3 then elemAt parts 3 else "1"}";
     # Wine tarballs for X.0 releases live under X.0/, later ones under X.x/.
     wineDir = v:
       let parts = splitVersion v;
@@ -70,6 +74,7 @@ sources=$(nix eval --raw --file "$releases_file" --apply '
           else [ ])
       ++ [
         "file python.sha256 ${r.python.version} https://www.python.org/ftp/python/${r.python.version}/python-${r.python.version}-amd64.exe"
+        "file git.sha256 ${r.git.version} https://github.com/git-for-windows/git/releases/download/${gitTag r.git.version}/MinGit-${r.git.version}-64-bit.zip"
       ]
       ++ map (c: "file cudaRedist.components.${c.name}.sha256 ${r.cudaRedist.version} https://developer.download.nvidia.com/compute/${c.path}") r.cudaRedist.components;
   in

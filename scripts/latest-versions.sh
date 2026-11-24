@@ -11,6 +11,7 @@
 #   wine                 highest wine-staging tag of the form vX.Y, since a release set needs both the Wine tarball and the matching wine-staging tree
 #   nvcuda               head of the default branch, and the revision bundled as a submodule by the latest nvidia-libs release; the pin reads "bundled" for a release set without nvcuda
 #   python               per series, the highest patch release with a Windows amd64 installer on python.org; the latest version is that of the newest series
+#   git                  latest Git for Windows release, as the version its MinGit archive is named after
 #   cuda, cudnn          NVIDIA's redist manifests: the latest CUDA manifest of one major version and the latest cuDNN manifest
 #
 # Options:
@@ -64,6 +65,7 @@ pins=$(nix eval --raw --file "$repo_root/nix/releases.nix" --apply '
   + "nvidiaLibs ${r.nvidiaLibs.version}\n"
   + "nvcuda ${r.nvcuda.rev or "bundled"}\n"
   + "python ${r.python.version}\n"
+  + "git ${r.git.version}\n"
   + "cudaRedist ${r.cudaRedist.version}\n"
   + "cudaMajor ${head (match "([0-9]+).*" r.cudaRedist.version)}\n"
 ')
@@ -153,6 +155,15 @@ if [ -z "$python_latest" ]; then
   exit 1
 fi
 
+# A tag v<git version>.windows.<n> names its MinGit archive after <git version> for n = 1 and after <git version>.<n> otherwise.
+git_tag=$(github_latest git-for-windows/git)
+git_latest=${git_tag#v}
+case $git_latest in
+  *.windows.1) git_latest=${git_latest%.windows.1} ;;
+  *) git_latest=${git_latest/.windows./.} ;;
+esac
+row git "$(pin git)" "$git_latest"
+
 cuda_newest=$(latest_manifest cuda/redist)
 if [ "$cuda_major" = "latest" ]; then cuda_major=${cuda_newest%%.*}; fi
 cuda_major=${cuda_major:-$(pin cudaMajor)}
@@ -213,6 +224,7 @@ if [ "$plain" = 1 ]; then
   printf 'pinned.nvidiaLibs %s\n' "$(pin nvidiaLibs)"
   printf 'pinned.nvcuda %s\n' "$nvcuda_pin"
   printf 'pinned.python %s\n' "$python_pin"
+  printf 'pinned.git %s\n' "$(pin git)"
   printf 'pinned.cudaRedist %s\n' "$(pin cudaRedist)"
   printf 'bonsai %s\n' "$bonsai_latest"
   printf 'wine %s\n' "$wine_latest"
@@ -220,6 +232,7 @@ if [ "$plain" = 1 ]; then
   printf 'nvcudaHead %s\n' "$nvcuda_head"
   printf 'nvcudaBundled %s\n' "$nvcuda_bundled"
   printf 'python %s\n' "$python_latest"
+  printf 'git %s\n' "$git_latest"
   printf 'cuda %s\n' "$cuda_latest"
   printf 'cudnn %s\n' "$cudnn_latest"
   # component <name> <pinned path> <latest path> <latest hash>

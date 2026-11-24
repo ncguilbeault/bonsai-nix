@@ -1,5 +1,5 @@
 # Release sets: each Bonsai version is pinned together with every dependency it is
-# released against (Wine, nvidia-libs, nvcuda, the CUDA runtime and Python). A new
+# released against (Wine, nvidia-libs, nvcuda, the CUDA runtime, Python and MinGit). A new
 # release adds an entry here; the hashes are printed by scripts/fetch-hashes.sh.
 # Dependency pins shared by several releases are bound once below and reused.
 # nvcuda is optional: a release set without it uses the nvcuda.dll bundled with
@@ -89,6 +89,11 @@ let
     sha256 = "sha256-Z7VjXoDqUQcrh5QTEtAOyJJ8Tbm6GJOPetLSezKLlfs=";
   };
 
+  git_2_56_1 = {
+    version = "2.56.1";
+    sha256 = "sha256-SpKFC26RfaT9AQZpthS1Xcz1sOwzOlNMxL5HAN/v2v0=";
+  };
+
   cudaRedist_13_5 = {
     version = "13.5-cudnn9.28.1";
     components = [
@@ -133,6 +138,7 @@ in
     nvcuda = nvcuda_772b344;
     cudaRedist = cudaRedist_12_8;
     python = python_3_12_10;
+    git = git_2_56_1;
   };
 
   "2.9.1" = {
@@ -142,6 +148,7 @@ in
     nvcuda = nvcuda_772b344;
     cudaRedist = cudaRedist_12_8;
     python = python_3_12_10;
+    git = git_2_56_1;
   };
 
   "2.9.2" = {
@@ -151,6 +158,7 @@ in
     nvcuda = nvcuda_772b344;
     cudaRedist = cudaRedist_12_8;
     python = python_3_12_10;
+    git = git_2_56_1;
   };
 
   "2.9.3" = {
@@ -159,5 +167,6 @@ in
     nvidiaLibs = nvidiaLibs_1_0_5;
     cudaRedist = cudaRedist_13_5;
     python = python_3_12_10;
+    git = git_2_56_1;
   };
 }
