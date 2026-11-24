@@ -15,7 +15,7 @@ Every package is built from the release sets in `nix/releases.nix`, each of whic
 - `packages.nvidia-libs` — the unpacked nvidia-libs release bundle (useful on its own for other prefixes). When the release set pins nvcuda, the bundle's `nvcuda.dll` is replaced by the source-built one.
 - `packages.cuda-redist` — the Windows CUDA runtime and cuDNN DLLs collected from NVIDIA's official redistributable archives.
 - `packages.<name>_<bonsai version>` (e.g. `bonsai_2_9_1`, `bonsai-python_2_9_1`, `bonsai-cuda_2_9_1`, `bonsai-cuda-python_2_9_1`) — each of the Bonsai packages above pinned to one release set.
-- `packages.<name>_<own version>` (e.g. `wine_11_12`, `nvidia-libs_1_0_2_nvcuda_772b344`, `cuda-redist_12_8_cudnn9_25_0`, `python-installer_3_12_10`) — each dependency pinned to one of its versions, built once and shared by the release sets that use it.
+- `packages.<name>_<own version>` (e.g. `wine_11_22`, `nvidia-libs_1_0_5`, `cuda-redist_13_5_cudnn9_28_1`, `python-installer_3_12_10`) — each dependency pinned to one of its versions, built once and shared by the release sets that use it.
 - `packages.nvcuda_<revision>` (e.g. `nvcuda_772b344`) — [nvcuda](https://github.com/SveSop/nvcuda) built from source at a pinned revision with that pin's patches. It exists only for revisions pinned by a release set, and an unversioned `packages.nvcuda` exists only when the latest release set pins nvcuda.
 - `homeManagerModules.bonsai` — a Home Manager module exposing `programs.bonsai`. Adds the resolved package to `home.packages`.
 - `nixosModules.bonsai` — a NixOS module exposing the same `programs.bonsai` interface. Adds the resolved package to `environment.systemPackages` for a system-wide install.
@@ -70,7 +70,7 @@ bonsai-wine wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d 
 - `cudaRedist` — a version label and the CUDA runtime and cuDNN archives (name, path and hash of each);
 - `python` — the python.org Windows Python version and installer hash.
 
-Each dependency pin is bound once in the `let` block at the top of the file (`wine_11_12`, `nvidiaLibs_1_0_2`, `nvcuda_772b344`, ...) and referenced by name from the release sets that use it (`wine = wine_11_12;`).
+Each dependency pin is bound once in the `let` block at the top of the file (`wine_11_22`, `nvidiaLibs_1_0_5`, `nvcuda_772b344`, ...) and referenced by name from the release sets that use it (`wine = wine_11_22;`).
 
 ### Package names
 
@@ -84,6 +84,8 @@ Each pin is built once and shared by the release sets that use it:
 | --- | --- | --- | --- | --- | --- |
 | 2.9.0 | `wine_11_8` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` |
 | 2.9.1 | `wine_11_12` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` |
+| 2.9.2 | `wine_11_22` | `nvidia-libs_1_0_2_nvcuda_772b344` | `nvcuda_772b344` | `cuda-redist_12_8_cudnn9_25_0` | `python-installer_3_12_10` |
+| 2.9.3 | `wine_11_22` | `nvidia-libs_1_0_5` | bundled with nvidia-libs | `cuda-redist_13_5_cudnn9_28_1` | `python-installer_3_12_10` |
 
 Since a package name stands for one pin, the flake's packages fail to evaluate with an error when two release sets carry different pins for the same version of a dependency (or the same nvcuda revision).
 
@@ -103,10 +105,10 @@ bonsai-2.9.1                # Bonsai 2.9.1 on its release's Wine, in wine-bonsai
 bonsai-wine-2.9.1 winecfg   # winecfg of that release's Wine, on wine-bonsai-2.9.1
 ```
 
-A versioned Wine package suffixes every command with its version (`wine-11.12`, `winecfg-11.12`, `winetricks-11.12`, ...), so several Wine versions install side by side with each other and with the unversioned `wine` package. Like `wine`, they set no `WINEPREFIX`:
+A versioned Wine package suffixes every command with its version (`wine-11.22`, `winecfg-11.22`, `winetricks-11.22`, ...), so several Wine versions install side by side with each other and with the unversioned `wine` package. Like `wine`, they set no `WINEPREFIX`:
 
 ```sh
-nix profile install github:ncguilbeault/bonsai-nix#wine_11_8 github:ncguilbeault/bonsai-nix#wine_11_12
+nix profile install github:ncguilbeault/bonsai-nix#wine_11_12 github:ncguilbeault/bonsai-nix#wine_11_22
 WINEPREFIX=~/prefixes/test winecfg-11.12
 ```
 
@@ -152,11 +154,11 @@ nix profile install github:ncguilbeault/bonsai-nix#bonsai-cuda
 
 `bonsai-setup` installs the libraries into the prefix the same way upstream's `setup_nvlibs.sh` does: a `native` DLL override plus a symlink into `system32`/`syswow64` for each DLL, followed by a prefix update so Wine picks up NVML from `WINEDLLPATH`. The symlinks point into the Nix store, and a version-tagged marker (`.bonsai-nvlibs-<version>`) re-runs the step (re-pointing the symlinks) when the nvidia-libs version changes. At run time `bonsai`, `bonsai-setup` and `bonsai-wine` export `WINEDLLPATH` (for NVML) and, where `/run/opengl-driver/lib` exists (NixOS), prepend it to `LD_LIBRARY_PATH` so the Wine-side libraries can `dlopen` the host driver's `libcuda.so.1`, `libnvcuvid.so.1` and `libnvidia-encode.so.1`. The Wine packages carry no NVIDIA environment, so a Wine command that needs these libraries is run through `bonsai-wine`.
 
-In the flake packages, a release set that pins `nvcuda` replaces the bundle's prebuilt `nvcuda.dll` with one built from source, which allows patches to be applied to it. `patches/0002-nvcuda-relay-cuLaunchHostFunc-through-callback-worker.patch` is such a patch: without it, applications that use CUDA host functions, such as ONNX Runtime, crash. Releases 2.9.0 and 2.9.1 pin the same nvcuda revision with this patch and share one build of it, compiled with Wine 11.8, the older Wine of the two.
+In the flake packages, a release set that pins `nvcuda` replaces the bundle's prebuilt `nvcuda.dll` with one built from source, which allows patches to be applied to it. `patches/0002-nvcuda-relay-cuLaunchHostFunc-through-callback-worker.patch` is such a patch: without it, applications that use CUDA host functions, such as ONNX Runtime, crash. Releases 2.9.0 to 2.9.2 pin the same nvcuda revision with this patch and share one build of it, compiled with Wine 11.8, the oldest Wine among them; 2.9.3 uses the `nvcuda.dll` bundled with nvidia-libs.
 
 nvidia-libs only covers the driver-level libraries. Applications built on the CUDA *toolkit* — for example ONNX Runtime's CUDA execution provider — additionally expect the toolkit runtime DLLs (`cudart64_*`, `cublas64_*`, `cublasLt64_*`, `cufft64_*`, `curand64_*`, `nvrtc64_*`, `cudnn64_9` and its `cudnn_*` sublibraries), which on Windows every application must ship or install separately. The `bonsai-cuda` variant therefore also installs `packages.cuda-redist` into the prefix: the DLLs are collected from NVIDIA's official redistributable archives and symlinked into `system32` under a `.bonsai-cuda-redist-<version>` marker. No DLL overrides are needed for these since Wine has no builtins for them. In the modules this is `programs.bonsai.cudaRuntime.enable`, which is independent of `nvidiaLibs.enable` but only useful together with it.
 
-The component versions and hashes are pinned per release set: 2.9.0 and 2.9.1 carry CUDA 12.8 with cuDNN 9.25 (about 2.3 GiB installed). The major version is part of the DLL names (`cudart64_12.dll`), so an application needs a release whose CUDA major version it was built against. In the modules the component set can be swapped via `programs.bonsai.cudaRuntime.components` together with `programs.bonsai.cudaRuntime.version`, or replaced by a prebuilt package via `programs.bonsai.cudaRuntime.package`.
+The component versions and hashes are pinned per release set, and the CUDA major version differs between release sets: 2.9.0 to 2.9.2 carry CUDA 12.8 with cuDNN 9.25 (about 2.3 GiB installed), 2.9.3 carries CUDA 13.5 with cuDNN 9.28. The major version is part of the DLL names (`cudart64_12.dll`, `cudart64_13.dll`), so an application needs the release whose CUDA major version it was built against. In the modules the component set can be swapped via `programs.bonsai.cudaRuntime.components` together with `programs.bonsai.cudaRuntime.version`, or replaced by a prebuilt package via `programs.bonsai.cudaRuntime.package`.
 
 Requirements: the proprietary NVIDIA driver on the host (branch 580+ recommended by upstream) and an x86_64 Linux host. The cuda variants are not exposed on aarch64-linux, since CUDA cannot function under FEX emulation (the emulated x86_64 Wine process cannot load the host's aarch64 driver libraries), nor on macOS, where the Linux driver libraries that nvidia-libs dlopens do not exist.
 
@@ -191,7 +193,7 @@ In the modules, `programs.bonsai.wine.patches` defaults to the patches of the re
 
 ```nix
 programs.bonsai.wine.patches =
-  (import "${inputs.bonsai-nix}/nix/releases.nix")."2.9.1".wine.patches
+  (import "${inputs.bonsai-nix}/nix/releases.nix")."2.9.3".wine.patches
   ++ [ ./patches/fix-my-bug.patch ];
 ```
 

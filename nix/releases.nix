@@ -22,9 +22,21 @@ let
     patches = [ treeviewPatch ];
   };
 
+  wine_11_22 = {
+    version = "11.22";
+    sha256 = "sha256-8XLpwb5z6GIFferh8OA86VkZmGxd+KGOHAgpw0hjye4=";
+    stagingSha256 = "sha256-kxryu+lTxQv2WJZh7fpYSpVh4gbko18ADTX2tf97I94=";
+    patches = [ treeviewPatch ];
+  };
+
   nvidiaLibs_1_0_2 = {
     version = "1.0.2";
     sha256 = "sha256-Aei7Y2jQiOItjo8dAklyFOjbQ2R2Ahcl7wwHB7fLFzg=";
+  };
+
+  nvidiaLibs_1_0_5 = {
+    version = "1.0.5";
+    sha256 = "sha256-F9T9/Fm9rU6EJfvXXfHygouOfW8e9kNIgb5HRH94+N4=";
   };
 
   nvcuda_772b344 = {
@@ -76,6 +88,42 @@ let
     version = "3.12.10";
     sha256 = "sha256-Z7VjXoDqUQcrh5QTEtAOyJJ8Tbm6GJOPetLSezKLlfs=";
   };
+
+  cudaRedist_13_5 = {
+    version = "13.5-cudnn9.28.1";
+    components = [
+      {
+        name = "cuda_cudart";
+        path = "cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-13.5.37-archive.zip";
+        sha256 = "sha256-75dHsTvSwsGZpfJ1a1bJTQtazwRVbOle9GSRIu6bdSo=";
+      }
+      {
+        name = "libcublas";
+        path = "cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.10.0.20-archive.zip";
+        sha256 = "sha256-Ro2Q/1aA/Qj9kTDm5EPG4Mk08vmLauQYmWC52QOeiWk=";
+      }
+      {
+        name = "libcufft";
+        path = "cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.5.0.14-archive.zip";
+        sha256 = "sha256-tNBtc1uFZfnrHF/xVgeOjCQOsCWhWPlRqZzAzARxLzs=";
+      }
+      {
+        name = "libcurand";
+        path = "cuda/redist/libcurand/windows-x86_64/libcurand-windows-x86_64-10.4.5.25-archive.zip";
+        sha256 = "sha256-SvMdb3xWCgHDvG61ZbI+q4jHerZIc4WWwyTSnB6Z1D4=";
+      }
+      {
+        name = "cuda_nvrtc";
+        path = "cuda/redist/cuda_nvrtc/windows-x86_64/cuda_nvrtc-windows-x86_64-13.5.37-archive.zip";
+        sha256 = "sha256-RdDo35bejHjk1rvH2+0/AlsR5VGnJZWVnaqr24eSeNo=";
+      }
+      {
+        name = "cudnn";
+        path = "cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.28.1.4_cuda13-archive.zip";
+        sha256 = "sha256-WWOod2gDosN3Kltx7Lsny6gZdzIWEvXXlMBGivTl5ms=";
+      }
+    ];
+  };
 in
 {
   "2.9.0" = {
@@ -93,6 +141,23 @@ in
     nvidiaLibs = nvidiaLibs_1_0_2;
     nvcuda = nvcuda_772b344;
     cudaRedist = cudaRedist_12_8;
+    python = python_3_12_10;
+  };
+
+  "2.9.2" = {
+    bonsai.sha256 = "sha256-CRUSQr82tiIi8g0DMxJ6uydBBjI3o2VqlxUNE5W4Awo=";
+    wine = wine_11_22;
+    nvidiaLibs = nvidiaLibs_1_0_2;
+    nvcuda = nvcuda_772b344;
+    cudaRedist = cudaRedist_12_8;
+    python = python_3_12_10;
+  };
+
+  "2.9.3" = {
+    bonsai.sha256 = "sha256-jdQZzD7tRnoewlj5wU4Jt9in1hK4/jG7jRtIUN/zAR8=";
+    wine = wine_11_22;
+    nvidiaLibs = nvidiaLibs_1_0_5;
+    cudaRedist = cudaRedist_13_5;
     python = python_3_12_10;
   };
 }
