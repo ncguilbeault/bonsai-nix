@@ -141,6 +141,58 @@ A module install differs from the flake packages in four ways:
 
 The nvidia-libs environment (`WINEDLLPATH`, `LD_LIBRARY_PATH`) and `bonsai.extraEnv` are exported by `bonsai`, `bonsai-setup` and `bonsai-wine`, not by the Wine commands. With `nvidiaLibs.enable`, a bare `wine` therefore runs without that environment; use `bonsai-wine wine ...` for anything that needs the NVIDIA libraries.
 
+### Adding a release
+
+A release is added by appending a release set for the new Bonsai version to `nix/releases.nix`. `scripts/new-release.sh` generates it: it looks up the upstream versions with `scripts/latest-versions.sh`, computes the hashes with `scripts/fetch-hashes.sh`, and prints the result or writes it to the file. The two helper scripts also run on their own. All three need `nix`; `new-release.sh` and `latest-versions.sh` also need `curl` and `git`.
+
+```sh
+# see what has moved upstream since the latest release set
+bash scripts/latest-versions.sh
+
+# preview a release that takes the latest of everything
+bash scripts/new-release.sh
+
+# add a release that keeps Wine and CUDA as they are and stays on Python 3.13
+bash scripts/new-release.sh --hold-wine --hold-cuda --python 3.13 --write
+```
+
+#### `scripts/new-release.sh`
+
+Builds the release set for a new Bonsai version. It prints the sources (version, URL and hash of each), the bindings to add to the `let` block, the release set, and notes on anything that needs attention. Nothing is written without `--write`. It refuses a Bonsai version that is already listed.
+
+Every dependency rolls forward by default: Bonsai, Wine and nvidia-libs to their latest release, nvcuda to the head of its default branch as a source build, CUDA to the latest NVIDIA manifests of the newest CUDA major version, and Python to the newest release that has a Windows installer. A dependency whose version matches the highest release set reuses that set's binding; otherwise a binding named after the version is reused if the file has one and added if not. A Wine binding that is added carries the patches of the highest release set's Wine binding. A new nvcuda revision starts with an empty patch list, since patches are tied to the revision they were written for.
+
+| Option | Effect |
+| --- | --- |
+| `--write` | Add the bindings and the release set to `nix/releases.nix` instead of only printing them. |
+| `--bonsai <version>` | Bonsai version of the release set. Default: the latest Bonsai release. |
+| `--wine <version>` | Wine version. |
+| `--nvidia-libs <version>` | nvidia-libs version. |
+| `--nvcuda head\|bundled\|<rev>` | nvcuda revision to build from source: the branch head (default) or a given revision. `bundled` leaves nvcuda out of the release set, so the `nvcuda.dll` shipped with nvidia-libs is used. |
+| `--cuda-major <n>` | CUDA major version to stay within. Default: the newest major version. |
+| `--python <version>\|<major>[.<minor>]` | An exact Python version, or a major version (`3`) or series (`3.13`) to take the newest release of. |
+| `--hold-wine`, `--hold-nvidia-libs`, `--hold-nvcuda`, `--hold-cuda`, `--hold-python` | Keep that dependency as it is in the highest release set. |
+
+#### `scripts/latest-versions.sh`
+
+Prints the latest upstream version of every dependency next to the pin of the highest release set, marking the ones that differ with `*`. Python is listed for the pinned series and every newer one. When a CUDA component differs, it also prints a `components` list for `nix/releases.nix`, with paths and hashes taken from NVIDIA's manifests.
+
+| Option | Effect |
+| --- | --- |
+| `--plain` | Print one `<key> <value>` line per pin and per latest version instead of the table, for use by other scripts. |
+| `--cuda-major <n>\|latest` | CUDA major version whose latest manifest is used. Default: the pinned major version. |
+| `--python-series <major>[.<minor>]` | Restrict Python to one major version (`3`) or one series (`3.13`). |
+
+#### `scripts/fetch-hashes.sh`
+
+Downloads every source pinned in `nix/releases.nix` and prints its hash, one block per release set, each line named after the field it belongs to (`bonsai.sha256`, `wine.sha256`, `wine.stagingSha256`, `nvidiaLibs.sha256`, `nvcuda.sha256`, `python.sha256`, `cudaRedist.components.<name>.sha256`) and followed by the version and URL it was computed from. A source shared by several release sets is downloaded once.
+
+| Option | Effect |
+| --- | --- |
+| `--file <releases.nix>` | Read release sets from another file. |
+| `--release <bonsai version>` | Restrict the output to one release set. |
+| `--no-cuda` | Skip the CUDA component archives. |
+
 ## CUDA support (nvidia-libs)
 
 The `-cuda` package variants (and the `programs.bonsai.nvidiaLibs.enable` module option) bundle the prebuilt [nvidia-libs](https://github.com/SveSop/nvidia-libs) release, which provides `nvcuda`, `nvml`, `nvcuvid`/`nvencodeapi`, `nvoptix` and `nvapi` for Wine.
@@ -262,6 +314,10 @@ nix/
   common.nix          # programs.bonsai options (defaults from releases.nix) + package construction
   hm-module.nix       # Home Manager wrapper (writes home.packages)
   nixos-module.nix    # NixOS wrapper (writes environment.systemPackages)
+scripts/
+  new-release.sh      # builds the release set for a new Bonsai version, optionally adding it to nix/releases.nix
+  latest-versions.sh  # prints the latest upstream version of every pinned dependency
+  fetch-hashes.sh     # prints the hashes for every release set in nix/releases.nix
 ```
 
 ## Installing from Binary Cache
