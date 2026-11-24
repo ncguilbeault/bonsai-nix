@@ -17,6 +17,9 @@
 , winetricksVerbs ? [ "dotnet48" "allfonts" "gdiplus" ]
 , winetricksArgs ? [ ]
 , winetricksMarkerTag ? "default"
+# Windows version the prefix reports (a winecfg version name such as "win10"), set by
+# bonsai-setup after winetricks has run. When null the version is left as it is.
+, windowsVersion ? "win10"
 , installerArgs ? [ ]
 , extraEnv ? { WINEDEBUG = "-all"; }
 , bundleWine ? true
@@ -50,6 +53,13 @@ let
         ${lib.concatStringsSep " " (map lib.escapeShellArg winetricksVerbs)}
       touch "$tricks_marker"
     fi
+  '';
+
+  # The dotnet48 winetricks verb leaves the prefix reporting Windows 7, which installers
+  # that require a later Windows (such as python.org's) refuse. The version is set on
+  # every run, after winetricks, so that the steps below and Bonsai see the same one.
+  windowsVersionBlock = lib.optionalString (windowsVersion != null) ''
+    winecfg /v ${lib.escapeShellArg windowsVersion}
   '';
 
   # Installs nvidia-libs into the prefix the same way upstream's setup_nvlibs.sh does:
@@ -102,12 +112,19 @@ let
   # marker is version-tagged so a version bump installs the new release alongside the old
   # one. pythonPackages are installed with pip afterwards under a marker keyed on the list,
   # so changing the list re-runs pip (already satisfied packages are skipped).
+  # The installer refuses to run on anything older than Windows 8.1, so it depends on
+  # windowsVersionBlock having run.
   pythonBlock = lib.optionalString (python != null) ''
     python_marker="$WINEPREFIX/.bonsai-python-${python.version}"
     if [ ! -e "$python_marker" ]; then
       echo "bonsai-setup: installing Python ${python.version}"
-      wine ${lib.escapeShellArg python} ${lib.concatStringsSep " " (map lib.escapeShellArg pythonInstallerArgs)}
+      python_status=0
+      wine ${lib.escapeShellArg python} ${lib.concatStringsSep " " (map lib.escapeShellArg pythonInstallerArgs)} || python_status=$?
       wineserver -w
+      if [ "$python_status" -ne 0 ]; then
+        echo "bonsai-setup: the Python installer failed with status $python_status; its log is in the prefix under users/$USER/AppData/Local/Temp" >&2
+        exit "$python_status"
+      fi
       touch "$python_marker"
     fi
   '' + lib.optionalString (python != null && pythonPackages != [ ]) ''
@@ -169,6 +186,8 @@ let
     fi
 
     ${winetricksBlock}
+
+    ${windowsVersionBlock}
 
     ${nvidiaLibsBlock}
 

@@ -134,6 +134,13 @@ let
         description = "Bump this tag to force a re-run of winetricks in existing prefixes.";
       };
 
+      windowsVersion = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "win10";
+        example = "win10";
+        description = "Windows version the prefix reports, as a winecfg version name. Set by bonsai-setup after winetricks has run; when null the version is left as it is.";
+      };
+
       installerArgs = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
@@ -343,7 +350,7 @@ let
   bonsaiArgs = {
     inherit (cfg.bonsai)
       version sha256 mirror wineArch
-      winetricksVerbs winetricksArgs winetricksMarkerTag
+      winetricksVerbs winetricksArgs winetricksMarkerTag windowsVersion
       installerArgs extraEnv bundleWine;
     inherit (cfg) prefixName;
     prefixPath = cfg.winePrefixes;

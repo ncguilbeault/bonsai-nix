@@ -22,7 +22,7 @@ Every package is built from the release sets in `nix/releases.nix`, each of whic
 
 The `cuda` packages (`bonsai-cuda`, `bonsai-cuda-python`, `nvidia-libs`, `nvcuda`, `cuda-redist` and their pinned forms) are exposed on `x86_64-linux` only.
 
-Both modules share a common backbone (`nix/common.nix`) that declares `programs.bonsai.enable`, `programs.bonsai.prefixName`, `programs.bonsai.winePrefixes`, the read-only `programs.bonsai.package` and `programs.bonsai.winePackage`, and submodule options under `programs.bonsai.wine` (version, sha256, stagingSha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraEnv, emulator), `programs.bonsai.bonsai` (version, sha256, mirror, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, installerArgs, extraEnv, bundleWine), `programs.bonsai.nvidiaLibs` (enable, version, sha256, mirror), `programs.bonsai.cudaRuntime` (enable, version, mirror, components, package) and `programs.bonsai.python` (enable, version, sha256, mirror, installerArgs, packages). Each module adds `programs.bonsai.installWine`, which installs the Wine package as a separate entry when `bonsai.bundleWine` is false. Version and hash options default from the release set of `programs.bonsai.bonsai.version`.
+Both modules share a common backbone (`nix/common.nix`) that declares `programs.bonsai.enable`, `programs.bonsai.prefixName`, `programs.bonsai.winePrefixes`, the read-only `programs.bonsai.package` and `programs.bonsai.winePackage`, and submodule options under `programs.bonsai.wine` (version, sha256, stagingSha256, variant, mirror, patches, replaceUpstreamPatches, withWinetricks, extraEnv, emulator), `programs.bonsai.bonsai` (version, sha256, mirror, wineArch, winetricksVerbs, winetricksArgs, winetricksMarkerTag, windowsVersion, installerArgs, extraEnv, bundleWine), `programs.bonsai.nvidiaLibs` (enable, version, sha256, mirror), `programs.bonsai.cudaRuntime` (enable, version, mirror, components, package) and `programs.bonsai.python` (enable, version, sha256, mirror, installerArgs, packages). Each module adds `programs.bonsai.installWine`, which installs the Wine package as a separate entry when `bonsai.bundleWine` is false. Version and hash options default from the release set of `programs.bonsai.bonsai.version`.
 
 ## Quick start
 
@@ -58,6 +58,10 @@ nix run github:ncguilbeault/bonsai-nix#wine -- winecfg
 ```sh
 bonsai-wine wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d N /f
 ```
+
+### Windows version
+
+`bonsai-setup` sets the Windows version the prefix reports to Windows 10 (`winecfg /v win10`) on every run, after winetricks. The `dotnet48` winetricks verb leaves the prefix reporting Windows 7, which installers that require a later Windows, such as python.org's, refuse. In the modules the version is `programs.bonsai.bonsai.windowsVersion`, a winecfg version name; `null` leaves the prefix's version as it is. It can be changed by hand with `bonsai-wine winecfg /v <version>`, until the next run of `bonsai-setup`.
 
 ## Releases
 
@@ -216,7 +220,7 @@ Requirements: the proprietary NVIDIA driver on the host (branch 580+ recommended
 
 ## Python in the prefix (Bonsai.Scripting.Python)
 
-The `-python` package variants (and the `programs.bonsai.python.enable` module option) run the official python.org Windows installer inside the prefix during `bonsai-setup`, unattended (`/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 Include_launcher=0` by default). This installs to `C:\Program Files\Python<XY>` and prepends it to the system `PATH` in the prefix registry, which is how `Bonsai.Scripting.Python` finds the runtime when `PythonHome` is left empty: it searches `PATH` for `python.exe` and derives the DLL name (`python312.dll` for Python 3.12) from the install directory's leaf name. Keep `InstallAllUsers=1` and `PrependPath=1` if you change `installerArgs`.
+The `-python` package variants (and the `programs.bonsai.python.enable` module option) run the official python.org Windows installer inside the prefix during `bonsai-setup`, unattended (`/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 Include_launcher=0` by default). This installs to `C:\Program Files\Python<XY>` and prepends it to the system `PATH` in the prefix registry, which is how `Bonsai.Scripting.Python` finds the runtime when `PythonHome` is left empty: it searches `PATH` for `python.exe` and derives the DLL name (`python312.dll` for Python 3.12) from the install directory's leaf name. Keep `InstallAllUsers=1` and `PrependPath=1` if you change `installerArgs`. The installer requires Windows 8.1 or later; see [Windows version](#windows-version).
 
 The Python version is pinned per release set in `nix/releases.nix`; every release set listed pins 3.12.10. It has to be a release with a Windows amd64 installer on python.org (late patch releases of a series have none) and one that the pythonnet version used by `Bonsai.Scripting.Python` supports (pythonnet 3.0.5 supports Python 3.7 through 3.13).
 
