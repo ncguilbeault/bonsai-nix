@@ -13,14 +13,14 @@
 }:
 
 { wineTools
-, rev ? "772b344a3594fca916999c5c5288d875332de482"
-, sha256 ? "sha256-2WRu93anAO/qxnwoTE+jKuEYPhqdQKUFF0OcScFpgZU="
+, rev
+, sha256
 , patches ? [ ]
 }:
 
 let
   # Mirrors the cross file shipped as build-wine64.txt in the nvcuda repository, with the
-  # compiler pinned to the same wine build the prefix runs.
+  # compiler taken from wineTools.
   crossFile = writeText "nvcuda-wine64-cross.txt" ''
     [binaries]
     c = '${wineTools}/bin/winegcc'
