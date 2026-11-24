@@ -6,10 +6,10 @@
 # system32; they are plain PE code that calls down into nvcuda.dll, which
 # nvidia-libs routes to the host driver.
 #
-# Component pins target CUDA 12.x (cudart64_12/cublas64_12), matching ONNX
-# Runtime GPU builds up to 1.22 and current cuDNN 9. Hashes come from NVIDIA's
-# redist manifests (https://developer.download.nvidia.com/compute/cuda/redist/
-# and .../compute/cudnn/redist/); scripts/fetch-hashes.sh can regenerate them.
+# The component archives and their hashes are pinned per release in
+# nix/releases.nix. Hashes come from NVIDIA's redist manifests
+# (https://developer.download.nvidia.com/compute/cuda/redist/ and
+# .../compute/cudnn/redist/).
 
 { lib
 , fetchurl
@@ -17,40 +17,10 @@
 , unzip
 }:
 
-{ version ? "12.8-cudnn9.25.0"
+{ version
+# Archives to fetch, each { name; path; sha256; } with path relative to the mirror.
+, components
 , mirror ? "https://developer.download.nvidia.com/compute"
-, components ? [
-    {
-      name = "cuda_cudart";
-      path = "cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-12.8.90-archive.zip";
-      sha256 = "sha256-SjkFj9hRlESoHPx64FXRNvSNGjH/pBriVbNbLt1h4Ts=";
-    }
-    {
-      name = "libcublas";
-      path = "cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.8.4.1-archive.zip";
-      sha256 = "sha256-V6RwESzsfhEslSU93os8cYTXldvZKwved6TLf4yUyKo=";
-    }
-    {
-      name = "libcufft";
-      path = "cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-11.3.3.83-archive.zip";
-      sha256 = "sha256-zG4LqVjPIzh7RiAXokRkxyvZAVSQRhM/PR68w9dETJA=";
-    }
-    {
-      name = "libcurand";
-      path = "cuda/redist/libcurand/windows-x86_64/libcurand-windows-x86_64-10.3.9.90-archive.zip";
-      sha256 = "sha256-RuujbCB0iyGlkntWm5QzN90YSFEyEZ37OaW82k7bEuI=";
-    }
-    {
-      name = "cuda_nvrtc";
-      path = "cuda/redist/cuda_nvrtc/windows-x86_64/cuda_nvrtc-windows-x86_64-12.8.93-archive.zip";
-      sha256 = "sha256-pjMCoHfwJIp0Ohp8qn29gND6xWxs+pxB+gX6ybfl7aU=";
-    }
-    {
-      name = "cudnn";
-      path = "cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.25.0.15_cuda12-archive.zip";
-      sha256 = "sha256-BulPcMUtczW37YBE7tKM6WO3/VnYwsRG/8YOaV/MrZE=";
-    }
-  ]
 }:
 
 stdenvNoCC.mkDerivation {

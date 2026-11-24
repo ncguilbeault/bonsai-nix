@@ -4,18 +4,37 @@ self:
 let
   cfg = config.programs.bonsai;
 
+  # Release sets keyed by Bonsai version. Version and hash defaults follow the set of
+  # the configured Bonsai version, or the latest set when that version is not listed.
+  releases = import "${self}/nix/releases.nix";
+  latestVersion = lib.last (lib.sort lib.versionOlder (builtins.attrNames releases));
+  isListed = releases ? ${cfg.bonsai.version};
+  release = releases.${if isListed then cfg.bonsai.version else latestVersion};
+
+  releaseText = attr: lib.literalExpression
+    "(import ./nix/releases.nix).\${config.programs.bonsai.bonsai.version}.${attr}";
+
   wineSettings = {
     options = {
       version = lib.mkOption {
         type = lib.types.str;
-        default = "11.0";
-        description = "Wine version (e.g. 11.0). Used to fetch the WineHQ tarball.";
+        default = release.wine.version;
+        defaultText = releaseText "wine.version";
+        description = "Wine version. Used to fetch the WineHQ tarball and the matching wine-staging tag.";
       };
 
       sha256 = lib.mkOption {
         type = lib.types.str;
-        default = "sha256-wHpoV5M8H8YN/1RI1585ySSBwenbWqYo250DWERuBwE=";
+        default = release.wine.sha256;
+        defaultText = releaseText "wine.sha256";
         description = "SRI hash body for the WineHQ tarball.";
+      };
+
+      stagingSha256 = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = release.wine.stagingSha256 or null;
+        defaultText = releaseText "wine.stagingSha256";
+        description = "SRI hash of the wine-staging source tree at tag v<version>. When null, the wine-staging patches are not applied.";
       };
 
       variant = lib.mkOption {
@@ -32,8 +51,9 @@ let
 
       patches = lib.mkOption {
         type = lib.types.listOf lib.types.path;
-        default = [ ];
-        description = "Extra patches to apply on top of (or in place of) upstream Wine patches.";
+        default = release.wine.patches or [ ];
+        defaultText = releaseText "wine.patches";
+        description = "Patches to apply on top of (or in place of) upstream Wine patches. Setting this replaces the release set's patches.";
       };
 
       replaceUpstreamPatches = lib.mkOption {
@@ -66,14 +86,22 @@ let
     options = {
       version = lib.mkOption {
         type = lib.types.str;
-        default = "2.9.0";
-        description = "Bonsai release version.";
+        default = latestVersion;
+        defaultText = lib.literalMD "the highest version in `nix/releases.nix`";
+        description = ''
+          Bonsai release version. When the version is listed in nix/releases.nix, the Wine,
+          nvidia-libs, CUDA runtime and Python defaults follow that release set; otherwise
+          they follow the latest release set and sha256 must be set.
+        '';
       };
 
       sha256 = lib.mkOption {
         type = lib.types.str;
-        default = "sha256-jL7m+I54h/f6mfEBooYze3TYp8aXofgQ1z0uB9GTmzs=";
-        description = "SRI hash body for the Bonsai installer exe.";
+        default =
+          if isListed then release.bonsai.sha256
+          else throw "programs.bonsai.bonsai.version: Bonsai ${cfg.bonsai.version} is not listed in nix/releases.nix; set programs.bonsai.bonsai.sha256 to the hash of its installer.";
+        defaultText = releaseText "bonsai.sha256";
+        description = "SRI hash body for the Bonsai installer exe. Has no default for versions not listed in nix/releases.nix.";
       };
 
       mirror = lib.mkOption {
@@ -132,13 +160,15 @@ let
 
       version = lib.mkOption {
         type = lib.types.str;
-        default = "1.0.2";
+        default = release.nvidiaLibs.version;
+        defaultText = releaseText "nvidiaLibs.version";
         description = "nvidia-libs release version.";
       };
 
       sha256 = lib.mkOption {
         type = lib.types.str;
-        default = "sha256-Aei7Y2jQiOItjo8dAklyFOjbQ2R2Ahcl7wwHB7fLFzg=";
+        default = release.nvidiaLibs.sha256;
+        defaultText = releaseText "nvidiaLibs.sha256";
         description = "SRI hash body for the nvidia-libs release tarball.";
       };
 
@@ -174,24 +204,25 @@ let
       enable = lib.mkEnableOption "Windows CUDA toolkit runtime DLLs (cudart, cuBLAS, cuFFT, cuRAND, NVRTC, cuDNN) in the Wine prefix";
 
       version = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Version label for the component set. When null, the default pinned in nix/cuda-redist.nix is used.";
+        type = lib.types.str;
+        default = release.cudaRedist.version;
+        defaultText = releaseText "cudaRedist.version";
+        description = "Version label for the component set.";
       };
 
       mirror = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Base URL for the NVIDIA redist archives. When null, the default pinned in nix/cuda-redist.nix is used.";
+        description = "Base URL for the NVIDIA redist archives. When null, the default in nix/cuda-redist.nix is used.";
       };
 
       components = lib.mkOption {
-        type = lib.types.nullOr (lib.types.listOf (lib.types.submodule cudaRedistComponent));
-        default = null;
+        type = lib.types.listOf (lib.types.submodule cudaRedistComponent);
+        default = release.cudaRedist.components;
+        defaultText = releaseText "cudaRedist.components";
         description = ''
           Redist archives to fetch; the 64-bit DLLs from each are collected under x64/.
-          When null, the default component set pinned in nix/cuda-redist.nix (CUDA 12.x + cuDNN 9) is used.
-          Set to change component versions, e.g. for a CUDA 13 ONNX Runtime build.
+          Set to change component versions, e.g. to match a different ONNX Runtime build.
         '';
       };
 
@@ -212,13 +243,15 @@ let
 
       version = lib.mkOption {
         type = lib.types.str;
-        default = "3.12.10";
+        default = release.python.version;
+        defaultText = releaseText "python.version";
         description = "Python release to install. Must have a Windows amd64 installer on python.org (patch releases past the binary cutoff of a series do not).";
       };
 
       sha256 = lib.mkOption {
         type = lib.types.str;
-        default = "sha256-Z7VjXoDqUQcrh5QTEtAOyJJ8Tbm6GJOPetLSezKLlfs=";
+        default = release.python.sha256;
+        defaultText = releaseText "python.sha256";
         description = "SRI hash of the python-<version>-amd64.exe installer.";
       };
 
@@ -270,9 +303,10 @@ let
     }
     else null;
 
-  # Only non-null settings are passed through so nix/cuda-redist.nix keeps its own defaults.
-  cudaRedistArgs = lib.filterAttrs (_: v: v != null) {
-    inherit (cfg.cudaRuntime) version mirror components;
+  cudaRedistArgs = {
+    inherit (cfg.cudaRuntime) version components;
+  } // lib.optionalAttrs (cfg.cudaRuntime.mirror != null) {
+    inherit (cfg.cudaRuntime) mirror;
   };
 
   cudaRedistPackage =
@@ -287,6 +321,15 @@ let
     }
     else null;
 
+  wineStagingSrc =
+    if cfg.wine.stagingSha256 == null then null
+    else pkgs.fetchFromGitHub {
+      owner = "wine-staging";
+      repo = "wine-staging";
+      rev = "v${cfg.wine.version}";
+      sha256 = cfg.wine.stagingSha256;
+    };
+
   wineArgs = {
     inherit (cfg.wine)
       version sha256 variant mirror patches replaceUpstreamPatches
@@ -294,6 +337,7 @@ let
     inherit (cfg) prefixName;
     prefixPath = cfg.winePrefixes;
     inherit winePkgs emulator;
+    stagingSrc = wineStagingSrc;
   };
 
   bonsaiArgs = {

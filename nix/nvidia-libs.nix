@@ -8,8 +8,8 @@
 , stdenvNoCC
 }:
 
-{ version ? "1.0.2"
-, sha256 ? "sha256-Aei7Y2jQiOItjo8dAklyFOjbQ2R2Ahcl7wwHB7fLFzg="
+{ version
+, sha256
 , mirror ? "https://github.com/SveSop/nvidia-libs/releases/download"
 # Optional source-built nvcuda derivation (see nix/nvcuda.nix); when set, its
 # x64/nvcuda.dll replaces the prebuilt one and the bundle version is suffixed so

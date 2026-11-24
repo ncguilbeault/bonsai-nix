@@ -8,8 +8,8 @@
 , fetchurl
 }:
 
-{ version ? "3.12.10"
-, sha256 ? "sha256-0000000000000000000000000000000000000000000="
+{ version
+, sha256
 , mirror ? "https://www.python.org/ftp/python"
 }:
 

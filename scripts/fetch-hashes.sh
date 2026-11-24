@@ -2,19 +2,34 @@
 # fetch-hashes.sh
 #
 # Usage:
-#   bash scripts/fetch-hashes.sh
+#   bash scripts/fetch-hashes.sh [--file <path>] [--release <version>] [--no-cuda]
 #
-# Prints the sha256 hashes needed by flake.nix (bonsaiSha256, wineSha256,
-# wineStagingSha256, nvidiaLibsSha256), reading the versions from flake.nix itself,
-# followed by the per-component hashes for nix/cuda-redist.nix, reading the archive
-# paths from that file.
+# Prints the sha256 hash of every source pinned in nix/releases.nix. Versions, revisions and archive paths are read from the release sets and each source is downloaded to compute its hash; a source shared by several release sets is downloaded once.
+#
+# Each release set is printed as a block with one line per source, named after the field the hash belongs to (bonsai.sha256, wine.sha256, wine.stagingSha256, nvidiaLibs.sha256, nvcuda.sha256, python.sha256, cudaRedist.components.<name>.sha256) and followed by a comment giving the version or revision and the URL or flake reference it was fetched from.
+#
+# Options:
+#   --file <path>        read release sets from this file instead of nix/releases.nix
+#   --release <version>  print only the release set of this Bonsai version
+#   --no-cuda            skip the CUDA component archives
 #
 # Prerequisites: nix
 
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-flake="$repo_root/flake.nix"
+
+releases_file="$repo_root/nix/releases.nix"
+only_release=
+with_cuda=1
+while [ $# -gt 0 ]; do
+  case $1 in
+    --file) releases_file=$2; shift 2 ;;
+    --release) only_release=$2; shift 2 ;;
+    --no-cuda) with_cuda=0; shift ;;
+    *) echo "Error: unknown argument $1" >&2; exit 1 ;;
+  esac
+done
 
 if ! command -v nix &>/dev/null; then
   echo "Error: nix is not installed." >&2
@@ -24,41 +39,80 @@ fi
 
 nix() { command nix --extra-experimental-features 'nix-command flakes' "$@"; }
 
-get_version() {
-  sed -n "s/.*$1 = \"\([^\"]*\)\".*/\1/p" "$flake"
-}
-
 json_hash() { sed -n 's/.*"hash": *"\([^"]*\)".*/\1/p'; }
 
-bonsai_version=$(get_version bonsaiVersion)
-wine_version=$(get_version wineVersion)
-nvidia_libs_version=$(get_version nvidiaLibsVersion)
+# One "release <bonsai version>" line per release set, each followed by one "<file|flake> <releases.nix field> <label> <url or flake reference>" line per source.
+sources=$(nix eval --raw --file "$releases_file" --apply '
+  releases:
+  let
+    inherit (builtins) attrNames concatMap concatStringsSep elemAt sort splitVersion compareVersions;
+    # Wine tarballs for X.0 releases live under X.0/, later ones under X.x/.
+    wineDir = v:
+      let parts = splitVersion v;
+      in "${elemAt parts 0}.${if elemAt parts 1 == "0" then "0" else "x"}";
+    versions = sort (a: b: compareVersions a b < 0) (attrNames releases);
+    linesFor = v:
+      let r = releases.${v};
+      in
+      [
+        "release ${v}"
+        "file bonsai.sha256 ${v} https://github.com/bonsai-rx/bonsai/releases/download/${v}/Bonsai-${v}.exe"
+        "file wine.sha256 ${r.wine.version} https://dl.winehq.org/wine/source/${wineDir r.wine.version}/wine-${r.wine.version}.tar.xz"
+      ]
+      ++ (if (r.wine.stagingSha256 or null) != null
+          then [ "flake wine.stagingSha256 ${r.wine.version} github:wine-staging/wine-staging/v${r.wine.version}" ]
+          else [ ])
+      ++ [
+        "file nvidiaLibs.sha256 ${r.nvidiaLibs.version} https://github.com/SveSop/nvidia-libs/releases/download/v${r.nvidiaLibs.version}/nvidia-libs-v${r.nvidiaLibs.version}.tar.xz"
+      ]
+      ++ (if r ? nvcuda
+          then [ "flake nvcuda.sha256 ${r.nvcuda.rev} github:SveSop/nvcuda/${r.nvcuda.rev}" ]
+          else [ ])
+      ++ [
+        "file python.sha256 ${r.python.version} https://www.python.org/ftp/python/${r.python.version}/python-${r.python.version}-amd64.exe"
+      ]
+      ++ map (c: "file cudaRedist.components.${c.name}.sha256 ${r.cudaRedist.version} https://developer.download.nvidia.com/compute/${c.path}") r.cudaRedist.components;
+  in
+  concatStringsSep "\n" (concatMap linesFor versions)
+')
 
-# Wine tarballs for X.0 releases live under X.0/, later ones under X.x/.
-wine_major=${wine_version%%.*}
-wine_minor=${wine_version#*.}
-if [ "$wine_minor" = "0" ]; then wine_dir="$wine_major.0"; else wine_dir="$wine_major.x"; fi
+if [ -n "$only_release" ]; then
+  sources=$(awk -v r="$only_release" '$1 == "release" { p = ($2 == r) } p' <<<"$sources")
+fi
+if [ "$with_cuda" = 0 ]; then
+  sources=$(grep -v '^[a-z]* cudaRedist\.' <<<"$sources" || true)
+fi
 
-bonsai_hash=$(nix store prefetch-file --json \
-  "https://github.com/bonsai-rx/bonsai/releases/download/$bonsai_version/Bonsai-$bonsai_version.exe" | json_hash)
+# Hashes already fetched in this run, as parallel arrays indexed together.
+fetched_refs=()
+fetched_hashes=()
 
-wine_hash=$(nix store prefetch-file --json \
-  "https://dl.winehq.org/wine/source/$wine_dir/wine-$wine_version.tar.xz" | json_hash)
+# Sets $hash to the hash of a source, fetching it unless it was fetched earlier in the run.
+fetch() {
+  local kind=$1 ref=$2 i
+  for i in "${!fetched_refs[@]}"; do
+    if [ "${fetched_refs[$i]}" = "$ref" ]; then
+      hash=${fetched_hashes[$i]}
+      return
+    fi
+  done
+  case $kind in
+    file) hash=$(nix store prefetch-file --json "$ref" </dev/null | json_hash) ;;
+    flake) hash=$(nix flake prefetch --json "$ref" </dev/null | json_hash) ;;
+  esac
+  if [ -z "$hash" ]; then
+    echo "Error: no hash obtained for $ref" >&2
+    exit 1
+  fi
+  fetched_refs+=("$ref")
+  fetched_hashes+=("$hash")
+}
 
-staging_hash=$(nix flake prefetch --json \
-  "github:wine-staging/wine-staging/v$wine_version" | json_hash)
-
-nvidia_libs_hash=$(nix store prefetch-file --json \
-  "https://github.com/SveSop/nvidia-libs/releases/download/v$nvidia_libs_version/nvidia-libs-v$nvidia_libs_version.tar.xz" | json_hash)
-
-printf 'wineStagingSha256 = "%s";\n' "$staging_hash"
-printf 'wineSha256 = "%s";\n' "$wine_hash"
-printf 'bonsaiSha256 = "%s";\n' "$bonsai_hash"
-printf 'nvidiaLibsSha256 = "%s";\n' "$nvidia_libs_hash"
-
-cuda_redist="$repo_root/nix/cuda-redist.nix"
-cuda_mirror=$(sed -n 's/.*mirror ? "\([^"]*\)".*/\1/p' "$cuda_redist")
-sed -n 's/.*path = "\([^"]*\)".*/\1/p' "$cuda_redist" | while read -r path; do
-  hash=$(nix store prefetch-file --json "$cuda_mirror/$path" | json_hash)
-  printf '%s: sha256 = "%s";\n' "${path%%/*}/${path##*/}" "$hash"
-done
+while read -r kind field label ref; do
+  if [ "$kind" = "release" ]; then
+    printf 'Bonsai %s\n' "$field"
+    continue
+  fi
+  fetch "$kind" "$ref"
+  printf '  %s = "%s";  # %s %s\n' "$field" "$hash" "$label" "$ref"
+done <<<"$sources"
