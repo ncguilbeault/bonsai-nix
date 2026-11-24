@@ -8,11 +8,16 @@
 , winetricks
 }:
 
-{ version ? "11.0"
-, sha256 ? "sha256-wHpoV5M8H8YN/1RI1585ySSBwenbWqYo250DWERuBwE="
+{ version
+, sha256
 , variant ? "full"
 , mirror ? "https://dl.winehq.org/wine/source"
-, prefixName ? "wine"
+, # Default WINEPREFIX of the shims is prefixPath/prefixName; when null they leave
+# WINEPREFIX alone, so Wine falls back to its own default.
+prefixName ? null
+# Appended to every command name (e.g. "-11.22" gives wine-11.22 and winecfg-11.22),
+# so that several Wine versions can be installed side by side.
+, binSuffix ? ""
 , patches ? [ ]
 , replaceUpstreamPatches ? false
 , withWinetricks ? true
@@ -21,7 +26,6 @@
 , stagingSrc ? null
 , emulator ? null
 , winePkgs ? pkgs
-, nvidiaLibs ? null
 }:
 
 let
@@ -111,28 +115,19 @@ let
   envExports = lib.concatStringsSep "\n"
     (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") extraEnv);
 
-  # nvidia-libs runtime environment: WINEDLLPATH lets wine pick up the NVML builtin
-  # (nvml.dll/nvml.so), and the ELF winelib modules (nvcuda, nvcuvid, ...) dlopen the
-  # host NVIDIA driver libraries, which live under /run/opengl-driver/lib on NixOS.
-  nvidiaLibsEnv = lib.optionalString (nvidiaLibs != null) ''
-    export WINEDLLPATH="${nvidiaLibs}/x64/wine''${WINEDLLPATH:+:$WINEDLLPATH}"
-    if [ -d /run/opengl-driver/lib ]; then
-      export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-    fi
-  '';
-
   # Shared preamble for every wine-family shim: set up WINEPREFIX, env, PATH.
   envSetup = ''
     set -euo pipefail
+  '' + lib.optionalString (prefixName != null) ''
     : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
     export WINEPREFIX
     mkdir -p "$WINEPREFIX"
+  '' + ''
     ${envExports}
-    ${nvidiaLibsEnv}
     export PATH="${wineBinDir}:$PATH"
   '';
 
-  mkWineShim = name: writeShellScriptBin name ''
+  mkWineShim = name: writeShellScriptBin "${name}${binSuffix}" ''
     ${envSetup}
     exec "${wineBinDir}/${name}" "$@"
   '';
@@ -154,8 +149,8 @@ let
 
   binShims = map mkWineShim shimNames;
 
-  # winetricks shim: forces it to use this wine, with a sane WINEPREFIX default.
-  winetricksShim = writeShellScriptBin "winetricks" ''
+  # winetricks shim: forces it to use this wine.
+  winetricksShim = writeShellScriptBin "winetricks${binSuffix}" ''
     ${envSetup}
     export WINE="${wineBinDir}/wine"
     export WINESERVER="${wineBinDir}/wineserver"
@@ -164,19 +159,17 @@ let
   '';
 in
 
-assert lib.assertMsg (nvidiaLibs == null || !isMac)
-  "bonsai-nix: nvidia-libs dlopens the Linux NVIDIA driver and cannot work on macOS; use the non-cuda packages instead.";
 symlinkJoin {
   name = "wine-${version}";
   paths = binShims ++ lib.optional withWinetricks winetricksShim;
 
   passthru = {
-    inherit wineHQ version variant emulator nvidiaLibs;
+    inherit wineHQ version variant emulator;
   };
 
   meta = {
     description = "Patched Wine ${version} (${variant})";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
-    mainProgram = "wine";
+    mainProgram = "wine${binSuffix}";
   };
 }

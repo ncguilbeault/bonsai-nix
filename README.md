@@ -4,9 +4,9 @@ A Nix flake that installs [Bonsai-rx](https://bonsai-rx.org/) on Linux and macOS
 
 ## What it provides
 
-- `packages.bonsai` — the `bonsai` launcher and `bonsai-setup` helper (auto-initializes the Wine prefix and installs Bonsai on first run). Symlink-joined with `packages.wine` by default.
-- `packages.wine` — a patched WineHQ build (default: 11.0, `wow-full`) exposed via shell shims that default `WINEPREFIX` and propagate `extraEnv`, with a `winetricks` shim and matching shims for `wine`, `wine64`, `wineboot`, `wineserver`, `winecfg`, `regedit`, `wineconsole`, `msiexec`, `winefile`, `notepad`, `uninstaller`, `winedbg`.
-- `packages.bonsai-cuda` / `packages.wine-cuda` — the same launcher and Wine build with [nvidia-libs](https://github.com/SveSop/nvidia-libs) (CUDA, NVML, NVENC/NVDEC, OptiX, NvAPI) and the Windows CUDA toolkit runtime DLLs bootstrapped into the Wine prefix on first run.
+- `packages.bonsai` — the `bonsai` launcher, the `bonsai-setup` helper (auto-initializes the Wine prefix and installs Bonsai on first run) and `bonsai-wine`, which runs a command (`winecfg`, `winetricks`, `wine ...`) with the patched Wine against that prefix. The Wine tools themselves are not put on `PATH`.
+- `packages.wine` — a patched WineHQ build (default: 11.0, `wow-full`) exposed via shell shims, with a `winetricks` shim and matching shims for `wine`, `wine64`, `wineboot`, `wineserver`, `winecfg`, `regedit`, `wineconsole`, `msiexec`, `winefile`, `notepad`, `uninstaller`, `winedbg`. It sets no `WINEPREFIX`, so Wine's own default prefix applies.
+- `packages.bonsai-cuda` — the same launcher with [nvidia-libs](https://github.com/SveSop/nvidia-libs) (CUDA, NVML, NVENC/NVDEC, OptiX, NvAPI) and the Windows CUDA toolkit runtime DLLs bootstrapped into the Wine prefix on first run.
 - `packages.nvidia-libs` — the unpacked nvidia-libs release bundle (useful on its own for other prefixes).
 - `packages.cuda-redist` — the Windows CUDA runtime and cuDNN DLLs collected from NVIDIA's official redistributable archives.
 - `packages.bonsai-python` / `packages.bonsai-cuda-python` — the same launchers with a python.org Windows Python installed into the Wine prefix on first run, for `Bonsai.Scripting.Python`.
@@ -25,30 +25,30 @@ nix profile install github:ncguilbeault/bonsai-nix
 bonsai
 ```
 
-The first invocation of `bonsai` runs the `bonsai-setup` script, which boots a Wine prefix at `~/.local/share/wineprefixes/wine-bonsai`, applies winetricks (`dotnet48 allfonts gdiplus` by default), and runs the Bonsai setup installer. Subsequent runs reuse the prefix and per-step markers (`.bonsai-booted`, `.bonsai-winetricks-<tag>`, `.bonsai-installed-<version>`) make the setup idempotent. If something fails during the first installation, delete the wine prefix and try running the setup again.
+On a prefix that is not set up, `bonsai` runs `bonsai-setup` and exits without starting Bonsai, since the Bonsai installer offers to launch it when it finishes; on a prefix that is set up, `bonsai` starts Bonsai. The setup boots a Wine prefix at `~/.local/share/wineprefixes/wine-bonsai`, applies winetricks (`dotnet48 allfonts gdiplus`), and runs the Bonsai setup installer. Per-step markers in the prefix (`.bonsai-booted`, `.bonsai-winetricks-<tag>`, `.bonsai-installed-<version>`) make the setup idempotent. If something fails during the first installation, delete the wine prefix and try running the setup again.
 
-`packages.wine` is exposed separately so you can run `winecfg`, `regedit`, etc. against the same prefix:
+`WINEPREFIX` overrides the prefix location for `bonsai`, `bonsai-setup` and `bonsai-wine`.
+
+`bonsai-wine <command> [args...]` runs a command in the environment the launcher uses: the same prefix and `WINEARCH`, with the release's Wine tools first on `PATH`. Use it to run `winecfg`, `regedit`, `winetricks`, etc. against the Bonsai prefix:
+
+```sh
+bonsai-wine winecfg
+bonsai-wine winetricks corefonts
+bonsai-wine wine reg query 'HKCU\Software\Wine\X11 Driver'
+```
+
+`packages.wine` is the same Wine build on its own. It has no default prefix, so its commands act on Wine's default prefix (`~/.wine`) unless `WINEPREFIX` is set:
 
 ```sh
 nix run github:ncguilbeault/bonsai-nix#wine -- winecfg
-# or, once installed, simply:
-winecfg
 ```
 
 ## Wine workarounds
 
-`bonsai-setup` sets `UseEGL=N` under `HKCU\Software\Wine\X11 Driver` in the prefix. Wine >= 10.17 implements WGL through EGL in the X11 driver by default, and on the NVIDIA proprietary driver the EGL path exposes no pixel formats that OpenTK accepts, so Bonsai.Shaders window creation fails with `The requested GraphicsMode is not supported` ([opentk/opentk#523](https://github.com/opentk/opentk/issues/523)). Forcing the deprecated GLX backend restores a working format list. This is a temporary workaround; drop it once Wine's EGL path works on the NVIDIA driver. Prefixes initialized before this workaround was added can apply it manually:
+`bonsai-setup` sets `UseEGL=N` under `HKCU\Software\Wine\X11 Driver` in the prefix. Wine >= 10.17 implements WGL through EGL in the X11 driver by default, and on the NVIDIA proprietary driver the EGL path exposes no pixel formats that OpenTK accepts, so Bonsai.Shaders window creation fails with `The requested GraphicsMode is not supported` ([opentk/opentk#523](https://github.com/opentk/opentk/issues/523)). Forcing the deprecated GLX backend restores a working format list. This is a temporary workaround; drop it once Wine's EGL path works on the NVIDIA driver. The value is set on every run of `bonsai-setup`, and can be set by hand:
 
 ```sh
-wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d N /f
-```
-
-## Wine workarounds
-
-`bonsai-setup` sets `UseEGL=N` under `HKCU\Software\Wine\X11 Driver` in the prefix. Wine >= 10.17 implements WGL through EGL in the X11 driver by default, and on the NVIDIA proprietary driver the EGL path exposes no pixel formats that OpenTK accepts, so Bonsai.Shaders window creation fails with `The requested GraphicsMode is not supported` ([opentk/opentk#523](https://github.com/opentk/opentk/issues/523)). Forcing the deprecated GLX backend restores a working format list. This is a temporary workaround; drop it once Wine's EGL path works on the NVIDIA driver. Prefixes initialized before this workaround was added can apply it manually:
-
-```sh
-wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d N /f
+bonsai-wine wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseEGL /t REG_SZ /d N /f
 ```
 
 ## CUDA support (nvidia-libs)
@@ -61,7 +61,7 @@ nix profile install github:ncguilbeault/bonsai-nix#bonsai-cuda
 # programs.bonsai.nvidiaLibs.enable = true;
 ```
 
-On the first run, `bonsai-setup` installs the libraries into the prefix the same way upstream's `setup_nvlibs.sh` does: a `native` DLL override plus a symlink into `system32`/`syswow64` for each DLL, followed by a prefix update so Wine picks up NVML from `WINEDLLPATH`. The symlinks point into the Nix store, and a version-tagged marker (`.bonsai-nvlibs-<version>`) re-runs the step (re-pointing the symlinks) when the nvidia-libs version changes. The wine shims additionally export `WINEDLLPATH` (for NVML) and, on NixOS, prepend `/run/opengl-driver/lib` to `LD_LIBRARY_PATH` so the Wine-side libraries can `dlopen` the host driver's `libcuda.so.1`, `libnvcuvid.so.1` and `libnvidia-encode.so.1`.
+`bonsai-setup` installs the libraries into the prefix the same way upstream's `setup_nvlibs.sh` does: a `native` DLL override plus a symlink into `system32`/`syswow64` for each DLL, followed by a prefix update so Wine picks up NVML from `WINEDLLPATH`. The symlinks point into the Nix store, and a version-tagged marker (`.bonsai-nvlibs-<version>`) re-runs the step (re-pointing the symlinks) when the nvidia-libs version changes. At run time `bonsai`, `bonsai-setup` and `bonsai-wine` export `WINEDLLPATH` (for NVML) and, where `/run/opengl-driver/lib` exists (NixOS), prepend it to `LD_LIBRARY_PATH` so the Wine-side libraries can `dlopen` the host driver's `libcuda.so.1`, `libnvcuvid.so.1` and `libnvidia-encode.so.1`. The Wine packages carry no NVIDIA environment, so a Wine command that needs these libraries is run through `bonsai-wine`.
 
 nvidia-libs only covers the driver-level libraries. Applications built on the CUDA *toolkit* — for example ONNX Runtime's CUDA execution provider — additionally expect the toolkit runtime DLLs (`cudart64_*`, `cublas64_*`, `cublasLt64_*`, `cufft64_*`, `curand64_*`, `nvrtc64_*`, `cudnn64_9` and its `cudnn_*` sublibraries), which on Windows every application must ship or install separately. The `bonsai-cuda` variant therefore also installs `packages.cuda-redist` into the prefix: the DLLs are collected from NVIDIA's official redistributable archives (component versions and hashes pinned in `nix/cuda-redist.nix`, defaulting to CUDA 12.x + cuDNN 9, ~2.6 GB installed) and symlinked into `system32` under a `.bonsai-cuda-redist-<version>` marker. No DLL overrides are needed for these since Wine has no builtins for them. In the modules this is `programs.bonsai.cudaRuntime.enable`; the component set can be swapped via `programs.bonsai.cudaRuntime.package` (e.g. for a CUDA 13 ONNX Runtime build).
 
@@ -81,7 +81,7 @@ nix profile install github:ncguilbeault/bonsai-nix#bonsai-python
 The step runs under a `.bonsai-python-<version>` marker, so bumping `version` (and `sha256`) installs the new release next to the old one. `packages` is a list of pip requirement specifiers installed afterwards with the prefix's `python -m pip`; it runs under a marker keyed on the list, so editing the list re-runs pip. The prefix's Python is also reachable from the shell through the wine shim:
 
 ```sh
-wine python -m pip install numpy
+bonsai-wine wine python -m pip install numpy
 ```
 
 ## macOS
@@ -137,7 +137,7 @@ programs.bonsai.wine.patches = [ ./patches/fix-my-bug.patch ];
 }
 ```
 
-This puts `bonsai`, `bonsai-setup`, and the patched `wine`/`winecfg`/`regedit`/etc. on every user's `PATH`. The Wine prefix itself remains per-user (stateful, created under each user's `$HOME` on first run), so each user gets their own prefix initialized by `bonsai-setup`.
+This puts `bonsai`, `bonsai-setup`, `bonsai-wine` and the patched `wine`/`winecfg`/`regedit`/etc. on every user's `PATH`. The Wine prefix itself remains per-user (stateful, created under each user's `$HOME` by `bonsai-setup`), so each user gets their own prefix.
 
 The HM and NixOS modules expose the same `programs.bonsai` interface — pick one based on whether you want a per-user or system-wide install. Don't import both into the same evaluation.
 
@@ -150,7 +150,7 @@ flake.nix             # inputs, packages, homeManagerModules, nixosModules
 patches/              # drop wine .patch files here
 nix/
   wine.nix            # WineHQ tarball override + shell shim wrappers
-  bonsai.nix          # installer fetch + bonsai-setup / bonsai scripts
+  bonsai.nix          # installer fetch + bonsai-setup / bonsai / bonsai-wine scripts
   nvidia-libs.nix     # SveSop/nvidia-libs release bundle (CUDA support)
   cuda-redist.nix     # Windows CUDA/cuDNN runtime DLLs from NVIDIA redist archives
   common.nix          # programs.bonsai options + package construction

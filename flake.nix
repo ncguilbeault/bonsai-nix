@@ -104,34 +104,29 @@
             sha256 = pythonSha256;
           };
 
-          # Variant constructors: the wine/bonsai builds are shared across variants;
-          # only the shim environment and prefix bootstrap differ.
-          mkWine = { nvidiaLibs ? null }: pkgs.callPackage ./nix/wine.nix { } {
+          wine = pkgs.callPackage ./nix/wine.nix { } {
             version = wineVersion;
             sha256 = wineSha256;
-            prefixName = prefixName;
-            prefixPath = prefixPath;
             stagingSrc = wineStagingSrc;
             winePkgs = winePkgs;
             emulator = if isArm then "${fex}/bin/FEXInterpreter" else null;
             patches = [ ./patches/0001-Remove-assertion-line-which-causes-crash-in-Bonsai-t.patch ];
-            inherit nvidiaLibs;
           };
 
+          # The wine build is shared across variants; only the prefix bootstrap differs.
           mkBonsai = { wine, nvidiaLibs ? null, cudaRedist ? null, python ? null }: pkgs.callPackage ./nix/bonsai.nix { inherit wine; } {
             version = bonsaiVersion;
             sha256 = bonsaiSha256;
             prefixName = prefixName;
             prefixPath = prefixPath;
+            bundleWine = false;
             inherit nvidiaLibs cudaRedist python;
           };
 
-          wine = mkWine { };
           bonsai = mkBonsai { inherit wine; };
           bonsaiPython = mkBonsai { inherit wine python; };
-          wineCuda = mkWine { inherit nvidiaLibs; };
-          bonsaiCuda = mkBonsai { wine = wineCuda; inherit nvidiaLibs cudaRedist; };
-          bonsaiCudaPython = mkBonsai { wine = wineCuda; inherit nvidiaLibs cudaRedist python; };
+          bonsaiCuda = mkBonsai { inherit wine; inherit nvidiaLibs cudaRedist; };
+          bonsaiCudaPython = mkBonsai { inherit wine; inherit nvidiaLibs cudaRedist python; };
         in
         {
           inherit wine bonsai;
@@ -143,7 +138,6 @@
         # (the x86_64 Wine process cannot load the host's aarch64 driver libraries), and
         # nvidia-libs dlopens the Linux NVIDIA driver, which does not exist on macOS.
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          wine-cuda = wineCuda;
           bonsai-cuda = bonsaiCuda;
           bonsai-cuda-python = bonsaiCudaPython;
           nvidia-libs = nvidiaLibs;

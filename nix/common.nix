@@ -115,7 +115,7 @@ let
       extraEnv = lib.mkOption {
         type = lib.types.attrsOf lib.types.str;
         default = { WINEDEBUG = "-all"; };
-        description = "Extra environment variables exported by bonsai-setup and bonsai.";
+        description = "Extra environment variables exported by bonsai, bonsai-setup and bonsai-wine.";
       };
 
       bundleWine = lib.mkOption {
@@ -294,7 +294,6 @@ let
     inherit (cfg) prefixName;
     prefixPath = cfg.winePrefixes;
     inherit winePkgs emulator;
-    nvidiaLibs = nvidiaLibsPackage;
   };
 
   bonsaiArgs = {
@@ -338,8 +337,8 @@ in
       default = "bonsai";
       description = ''
         Wine prefix directory name (under winePrefixes). Shared by the bonsai
-        launcher and every wine wrapper (winecfg, regedit, etc.) so they all
-        target the same prefix.
+        commands and the wrappers of the module's Wine package (winecfg, regedit,
+        etc.) so they all target the same prefix.
       '';
     };
 

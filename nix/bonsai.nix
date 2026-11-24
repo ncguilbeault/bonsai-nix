@@ -1,14 +1,18 @@
 { lib
+, stdenv
 , fetchurl
 , symlinkJoin
 , writeShellScriptBin
 , wine
 }:
 
-{ version ? "2.9.0"
-, sha256 ? "sha256-jL7m+I54h/f6mfEBooYze3TYp8aXofgQ1z0uB9GTmzs="
+{ version
+, sha256
 , mirror ? "https://github.com/bonsai-rx/bonsai/releases/download"
 , prefixName ? "bonsai"
+# Appended to the command names (e.g. "-2.9.0" gives bonsai-2.9.0 and
+# bonsai-setup-2.9.0 and bonsai-wine-2.9.0), so that several versions can be installed side by side.
+, binSuffix ? ""
 , wineArch ? "win64"
 , winetricksVerbs ? [ "dotnet48" "allfonts" "gdiplus" ]
 , winetricksArgs ? [ ]
@@ -52,7 +56,7 @@ let
   # a native DLL override plus a symlink into the prefix's system directory for every
   # bundled DLL. Symlinks point into the Nix store, so a version bump re-runs the block
   # (marker is version-tagged) and ln -sf re-points them. The trailing wineboot lets wine
-  # pick up the NVML builtin from WINEDLLPATH (exported by the wine shims).
+  # pick up the NVML builtin from WINEDLLPATH.
   nvidiaLibsBlock = lib.optionalString (nvidiaLibs != null) ''
     nvlibs_marker="$WINEPREFIX/.bonsai-nvlibs-${nvidiaLibs.version}"
     if [ ! -e "$nvlibs_marker" ]; then
@@ -116,7 +120,18 @@ let
     fi
   '';
 
-  setup = writeShellScriptBin "bonsai-setup" ''
+  # nvidia-libs runtime environment: WINEDLLPATH lets wine pick up the NVML builtin
+  # (nvml.dll/nvml.so), and the ELF winelib modules (nvcuda, nvcuvid, ...) dlopen the
+  # host NVIDIA driver libraries, which live under /run/opengl-driver/lib on NixOS.
+  nvidiaLibsEnv = lib.optionalString (nvidiaLibs != null) ''
+    export WINEDLLPATH="${nvidiaLibs}/x64/wine''${WINEDLLPATH:+:$WINEDLLPATH}"
+    if [ -d /run/opengl-driver/lib ]; then
+      export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+  '';
+
+  # Shared preamble of every script: the prefix, the environment and this build's Wine on PATH.
+  envSetup = ''
     set -euo pipefail
 
     : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
@@ -125,8 +140,26 @@ let
     mkdir -p "$WINEPREFIX"
 
     ${envExports}
-
+    ${nvidiaLibsEnv}
     export PATH="${wine}/bin:$PATH"
+  '';
+
+  # Runs a command in the environment the launcher uses, so that Wine tools act on this
+  # prefix with this build's Wine: bonsai-wine winecfg, bonsai-wine winetricks <verb>,
+  # bonsai-wine wine reg query ...
+  wineRun = writeShellScriptBin "bonsai-wine${binSuffix}" ''
+    if [ $# -eq 0 ]; then
+      echo "usage: bonsai-wine${binSuffix} <command> [args...]" >&2
+      exit 1
+    fi
+
+    ${envSetup}
+
+    exec "$@"
+  '';
+
+  setup = writeShellScriptBin "bonsai-setup${binSuffix}" ''
+    ${envSetup}
 
     boot_marker="$WINEPREFIX/.bonsai-booted"
     if [ ! -e "$boot_marker" ]; then
@@ -156,17 +189,8 @@ let
     echo "bonsai-setup: ready (prefix: $WINEPREFIX)"
   '';
 
-  launch = writeShellScriptBin "bonsai" ''
-    set -euo pipefail
-
-    : "''${WINEPREFIX:=${prefixPath}/${prefixName}}"
-    export WINEPREFIX
-    export WINEARCH=${lib.escapeShellArg wineArch}
-    mkdir -p "$WINEPREFIX"
-
-    ${envExports}
-
-    export PATH="${wine}/bin:$PATH"
+  launch = writeShellScriptBin "bonsai${binSuffix}" ''
+    ${envSetup}
 
     install_marker="$WINEPREFIX/.bonsai-installed-${version}"
     if [ ! -e "$install_marker" ]${
@@ -177,16 +201,18 @@ let
       lib.optionalString (python != null) " || [ ! -e \"$WINEPREFIX/.bonsai-python-${python.version}\" ]"
     }; then
       echo "bonsai: prefix not initialized; running bonsai-setup..."
-      ${setup}/bin/bonsai-setup
+      ${setup}/bin/bonsai-setup${binSuffix}
     else
       exec wine bonsai "$@"
     fi
   '';
 in
 
+assert lib.assertMsg (nvidiaLibs == null || !stdenv.hostPlatform.isDarwin)
+  "bonsai-nix: nvidia-libs dlopens the Linux NVIDIA driver and cannot work on macOS; use the non-cuda packages instead.";
 symlinkJoin {
   name = "bonsai-${version}";
-  paths = [ setup launch ] ++ lib.optional bundleWine wine;
+  paths = [ setup launch wineRun ] ++ lib.optional bundleWine wine;
 
   passthru = {
     inherit installer wine version nvidiaLibs cudaRedist python;
@@ -196,6 +222,6 @@ symlinkJoin {
     description = "Bonsai-rx ${version} installed into a Wine prefix";
     homepage = "https://bonsai-rx.org/";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
-    mainProgram = "bonsai";
+    mainProgram = "bonsai${binSuffix}";
   };
 }
